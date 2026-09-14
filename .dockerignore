@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.gitignore
+.env
+.env.local
+*.zip
+*.log
+logs
+.DS_Store
+.oxlintrc.json
+scratch

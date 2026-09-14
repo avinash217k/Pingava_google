@@ -1,0 +1,6 @@
+{
+  "name": "Pingava",
+  "description": "Next-gen website & REST API synthetic uptime monitoring, 6-region global edge waterfalls, predictive latency anomaly radar, API contract drift guardian, and Gemini AI root cause diagnostics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

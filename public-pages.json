@@ -1,0 +1,13 @@
+{
+  "/about": {"title": "About Pingava | Next-Gen Synthetic Monitoring", "description": "Learn how Pingava brings website and API monitoring, multi-region synthetic probes, automated incident response and public status communication together.", "indexable": true},
+  "/contact": {"title": "Contact Pingava | Engineering & Support", "description": "Get in touch with the Pingava engineering team for product support, enterprise questions, security disclosures, and integrations.", "indexable": true},
+  "/ssl-monitoring": {"title": "SSL Certificate Monitoring & Expiry Alerts | Pingava", "description": "Validate HTTPS certificates, monitor chain validity, TLS handshakes, and receive advance expiry alerts alongside synthetic uptime checks.", "indexable": true},
+  "/incident-management": {"title": "Incident Management & AI Post-Mortems | Pingava", "description": "Track automatic and manual incidents, generate AI post-mortems, coordinate resolution, and keep stakeholders informed with Pingava.", "indexable": true},
+  "/support": {"title": "Help & Support Center | Pingava", "description": "Find help with monitor setup, response assertions, alert routing, webhook configuration, and your Pingava workspace.", "indexable": true},
+  "/docs": {"title": "Documentation & Guides | Pingava", "description": "Comprehensive developer guides for synthetic uptime checks, API payload testing, multi-region probes, and public status pages.", "indexable": true},
+  "/api-docs": {"title": "REST API Documentation & Reference | Pingava", "description": "Complete REST API reference for Pingava. Automate monitors, query incident metrics, manage status pages, and configure webhooks.", "indexable": true},
+  "/blog": {"title": "Engineering & Reliability Blog | Pingava", "description": "Deep-dives on distributed synthetic probes, SSL lifecycle management, high-availability architecture, and incident response.", "indexable": true},
+  "/changelog": {"title": "Product Changelog & Release Notes | Pingava", "description": "Explore the latest features, improvements, and fixes across the Pingava synthetic monitoring platform.", "indexable": true},
+  "/pricing": {"title": "Pricing Plans & Tier Comparison | Pingava", "description": "Transparent pricing for developer teams and enterprises. Free forever tier, high-frequency checks, and custom probe locations.", "indexable": true},
+  "/status": {"title": "Pingava System Status & Service Health", "description": "Live status, 90-day uptime metrics, and real-time operational health across Pingava's global probe network and core platform.", "indexable": true}
+}

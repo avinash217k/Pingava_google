@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "pingavaSettings": {
+      "title": "Pingava Settings",
+      "description": "Persisted monitors, checks, status page config, incidents, and alert state",
+      "type": "object",
+      "properties": {
+        "monitors": {
+          "type": "array",
+          "description": "Configured synthetic monitors"
+        },
+        "checks": {
+          "type": "array",
+          "description": "Historical check records"
+        },
+        "incidents": {
+          "type": "array",
+          "description": "Active and resolved incident tracking"
+        },
+        "unifiedIncidents": {
+          "type": "array",
+          "description": "Correlated cross-service incidents"
+        },
+        "statusPageConfig": {
+          "type": "object",
+          "description": "Status page layout and customizations"
+        },
+        "statusSubscribers": {
+          "type": "array",
+          "description": "Subscribed users for status notifications"
+        },
+        "webhooks": {
+          "type": "array",
+          "description": "Configured webhook alert endpoints"
+        },
+        "alertDeliveries": {
+          "type": "array",
+          "description": "Notification delivery audit logs"
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/pingava_settings/{documentId}": {
+      "schema": "pingavaSettings",
+      "description": "Application settings and monitoring telemetry persistence"
+    }
+  }
+}

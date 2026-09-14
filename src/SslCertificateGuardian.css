@@ -1,0 +1,442 @@
+.ssl-guardian-container {
+  display: grid;
+  gap: 20px;
+  padding: 4px 0 16px;
+}
+
+.ssl-guardian-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line, #e4e7ec);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
+}
+
+.ssl-guardian-title-area {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ssl-icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: #f2f4f7;
+  color: #667085;
+  transition: all 0.2s ease;
+}
+
+.ssl-icon-box.valid {
+  background: #ecfdf3;
+  color: #087a4b;
+}
+
+.ssl-icon-box.expiring {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.ssl-icon-box.critical,
+.ssl-icon-box.expired,
+.ssl-icon-box.error {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.ssl-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.ssl-title-row h3 {
+  margin: 0;
+  font: 700 17px/1.3 'Manrope', -apple-system, sans-serif;
+  color: var(--ink, #182230);
+}
+
+.ssl-guardian-title-area p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted, #667085);
+}
+
+.ssl-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ssl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 7px;
+  border: 1px solid var(--line, #e4e7ec);
+  background: var(--surface, #ffffff);
+  color: var(--ink, #344054);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ssl-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.ssl-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ssl-btn.primary {
+  background: #087a4b;
+  border-color: #087a4b;
+  color: #ffffff;
+}
+
+.ssl-btn.primary:hover:not(:disabled) {
+  background: #065f38;
+}
+
+/* Lifetime / Countdown Hero Banner */
+.ssl-countdown-banner {
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line, #e4e7ec);
+  border-radius: 10px;
+  padding: 24px;
+  display: grid;
+  gap: 18px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
+}
+
+.ssl-countdown-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.ssl-days-display {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ssl-days-number {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.1;
+  font-family: 'Space Grotesk', -apple-system, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.ssl-days-number.valid {
+  color: #087a4b;
+}
+
+.ssl-days-number.expiring {
+  color: #d97706;
+}
+
+.ssl-days-number.critical,
+.ssl-days-number.expired,
+.ssl-days-number.error {
+  color: #dc2626;
+}
+
+.ssl-days-subtext {
+  font-size: 13px;
+  color: var(--muted, #667085);
+}
+
+.ssl-badges-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ssl-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ssl-badge.valid {
+  background: #ecfdf3;
+  color: #087a4b;
+  border: 1px solid #bbf7d0;
+}
+
+.ssl-badge.expiring {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.ssl-badge.critical,
+.ssl-badge.expired,
+.ssl-badge.error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.ssl-badge.neutral {
+  background: #f3f4f6;
+  color: #4b5563;
+  border: 1px solid #e5e7eb;
+}
+
+/* Progress bar */
+.ssl-progress-wrapper {
+  display: grid;
+  gap: 8px;
+}
+
+.ssl-progress-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted, #667085);
+  font-weight: 500;
+}
+
+.ssl-progress-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  overflow: hidden;
+  position: relative;
+}
+
+.ssl-progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ssl-progress-bar.valid {
+  background: linear-gradient(90deg, #10b981, #059669);
+}
+
+.ssl-progress-bar.expiring {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+
+.ssl-progress-bar.critical,
+.ssl-progress-bar.expired {
+  background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+
+/* Certificate Specs Grid */
+.ssl-specs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+
+.ssl-spec-card {
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line, #e4e7ec);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ssl-spec-card span {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted, #667085);
+}
+
+.ssl-spec-card strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink, #182230);
+  word-break: break-word;
+}
+
+.ssl-spec-card small {
+  font-size: 11px;
+  color: var(--muted, #94a3b8);
+}
+
+/* Alert Tiers Timeline */
+.ssl-tiers-card {
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line, #e4e7ec);
+  border-radius: 10px;
+  padding: 20px 24px;
+  display: grid;
+  gap: 16px;
+}
+
+.ssl-tiers-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ssl-tiers-header h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink, #182230);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ssl-tiers-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.ssl-tier-step {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.ssl-tier-step.armed {
+  border-color: #cbd5e1;
+}
+
+.ssl-tier-step.triggered {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+.ssl-tier-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink, #182230);
+}
+
+.ssl-tier-badge {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ssl-tier-badge.armed {
+  background: #ecfdf3;
+  color: #087a4b;
+}
+
+.ssl-tier-badge.active {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.ssl-tier-desc {
+  font-size: 11px;
+  color: var(--muted, #667085);
+  line-height: 1.4;
+}
+
+.ssl-alert-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #991b1b;
+  font-size: 13px;
+}
+
+.spin-slow {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Dark mode adjustments */
+[data-theme='dark'] .ssl-guardian-header,
+[data-theme='dark'] .ssl-countdown-banner,
+[data-theme='dark'] .ssl-spec-card,
+[data-theme='dark'] .ssl-tiers-card {
+  background: #111a2e;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='dark'] .ssl-icon-box {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme='dark'] .ssl-icon-box.valid {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+[data-theme='dark'] .ssl-icon-box.expiring {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+[data-theme='dark'] .ssl-icon-box.critical,
+[data-theme='dark'] .ssl-icon-box.expired,
+[data-theme='dark'] .ssl-icon-box.error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+[data-theme='dark'] .ssl-btn {
+  background: #1a243b;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+}
+
+[data-theme='dark'] .ssl-btn:hover:not(:disabled) {
+  background: #22304e;
+}
+
+[data-theme='dark'] .ssl-tier-step {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme='dark'] .ssl-progress-track {
+  background: rgba(255, 255, 255, 0.08);
+}

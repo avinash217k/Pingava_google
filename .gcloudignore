@@ -1,0 +1,12 @@
+.gcloudignore
+.git
+.gitignore
+node_modules/
+dist/
+*.zip
+*.log
+scratch/
+.DS_Store
+.npm_cache/
+.venv/
+scripts/supabase/extracted_data/

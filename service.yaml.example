@@ -1,0 +1,55 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: pingava
+spec:
+  template:
+    spec:
+      containerConcurrency: 1000
+      containers:
+      - env:
+        - name: APP_ENV
+          value: production
+        - name: PUBLIC_APP_URL
+          value: https://pingava.com
+        - name: FRONTEND_URL
+          value: https://pingava.com
+        - name: OWNER_EMAIL
+          value: your-email@example.com
+        - name: JWT_SECRET
+          value: your-secure-jwt-secret-here
+        - name: GEMINI_API_KEY
+          value: your-gemini-api-key-here
+        - name: GEMINI_MODEL
+          value: gemini-3.6-flash
+        - name: SMTP_HOST
+          value: smtp-relay.brevo.com
+        - name: SMTP_PORT
+          value: '587'
+        - name: SMTP_USER
+          value: your-smtp-user
+        - name: SMTP_PASS
+          value: your-smtp-password
+        - name: SMTP_FROM
+          value: alerts@pingava.com
+        - name: EMAIL_FROM
+          value: welcome@pingava.com
+        - name: ALERT_EMAIL_FROM
+          value: alerts@pingava.com
+        - name: SUPABASE_URL
+          value: https://your-project.supabase.co
+        - name: SUPABASE_SERVICE_ROLE_KEY
+          value: your-supabase-service-role-key
+        image: asia-southeast1-docker.pkg.dev/YOUR_PROJECT_ID/cloud-run-source-deploy/pingava:latest
+        name: app-container
+        ports:
+        - containerPort: 3000
+          name: http1
+        resources:
+          limits:
+            cpu: '1'
+            memory: 2Gi
+      timeoutSeconds: 300
+  traffic:
+  - latestRevision: true
+    percent: 100
