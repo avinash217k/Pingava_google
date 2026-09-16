@@ -21,9 +21,10 @@
 .public-footer-main { padding: 64px 0 42px; display: grid; grid-template-columns: minmax(235px, 1.4fr) repeat(3, minmax(125px, .76fr)) minmax(230px, 1.22fr); gap: clamp(24px, 3vw, 44px); }
 .public-footer-brand { max-width: 330px; }
 .public-footer-brand > a { display: inline-flex; color: var(--foreground); text-decoration: none; }
-.public-footer-brand .brand-lockup { padding: 0; font-size: 24px; }
+.public-footer-brand .brand-lockup { padding: 0; font-size: 24px; display: inline-flex; align-items: center; gap: 12px; }
 .public-footer .public-footer-brand .brand-lockup.compact { color: var(--foreground); }
-.public-footer-brand .brand-mark { width: 40px; height: 40px; }
+.public-footer-brand .brand-mark { width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.public-footer-brand .brand-mark img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .public-footer-brand p { margin: 16px 0 18px; color: var(--muted-foreground); font-size: 13px; line-height: 1.6; }
 .public-footer-social { display: flex; align-items: center; gap: 8px; }
 .public-footer-social a, .public-footer-social > span { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 7px; color: var(--muted-foreground); background: var(--surface); transition: transform .15s ease, color .15s ease, border-color .15s ease, background-color .15s ease; }

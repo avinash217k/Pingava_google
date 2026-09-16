@@ -102,9 +102,9 @@ export function PublicFooter({ showCta = false }: { showCta?: boolean }) {
     <div className="public-footer-main">
       <section className="public-footer-brand" aria-label="About Pingava">
         <a className="brand-lockup compact" href="/" aria-label="Pingava homepage">
-          <BrandMark /><strong>pingava</strong>
+          <BrandMark variant="mono" /><strong>pingava</strong>
         </a>
-        <p>Monitor your websites and APIs.<br />Detect issues. Alert your team.<br />Keep your users informed.</p>
+        <p>Know before your users do.<br />Detect issues. Alert your team.<br />Keep your services online.</p>
         <div className="public-footer-social">
           <a href="https://x.com/pingava" target="_blank" rel="noopener noreferrer" aria-label="Pingava on X" title="Pingava on X (@pingava)">
             <XIcon />

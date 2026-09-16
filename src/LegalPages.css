@@ -7,7 +7,16 @@
 .legal-page article { margin-top: 28px; padding: 38px 44px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: 0 8px 24px rgba(25, 45, 61, .04); }
 .legal-page article section + section { margin-top: 28px; padding-top: 28px; border-top: 1px solid var(--border); }
 .legal-page h2 { margin: 0 0 10px; color: var(--foreground); font: 700 18px/1.35 'Manrope', sans-serif; letter-spacing: 0; }
-.legal-page article p { margin: 0; color: var(--muted-foreground); font-size: 15px; line-height: 1.75; }
+.legal-page article p { margin: 0 0 12px; color: var(--muted-foreground); font-size: 15px; line-height: 1.75; }
+.legal-page article p:last-child { margin-bottom: 0; }
+.legal-page article h3 { margin: 18px 0 8px; color: var(--foreground); font: 700 15px/1.4 'Manrope', sans-serif; }
+.legal-page article ul, .legal-page article ol { margin: 8px 0 14px 20px; padding: 0; color: var(--muted-foreground); font-size: 15px; line-height: 1.75; }
+.legal-page article li { margin-bottom: 6px; }
+.legal-page article li strong { color: var(--foreground); }
+.legal-callout { margin: 16px 0; padding: 14px 18px; border-radius: 6px; border-left: 3px solid var(--primary); background: rgba(8, 122, 75, 0.06); font-size: 14px; color: var(--foreground); line-height: 1.6; }
+.legal-callout p { margin: 0 !important; color: var(--foreground) !important; font-size: 14px !important; }
 .legal-page article a { color: var(--primary); font-weight: 700; text-decoration-thickness: 1px; text-underline-offset: 3px; }
-.legal-page article a:hover { color: #05634f; }.legal-page article a:focus-visible { outline: 2px solid #1688d4; outline-offset: 3px; }
-@media (max-width: 620px) { .legal-page > main { width: min(100% - 28px, 820px); padding: 38px 0 52px; }.legal-page h1 { font-size: 31px; }.legal-page article { margin-top: 20px; padding: 26px 20px; }.legal-page article section + section { margin-top: 23px; padding-top: 23px; }.legal-page h2 { font-size: 17px; }.legal-page article p { font-size: 14px; line-height: 1.7; } }
+.legal-page article a:hover { color: #05634f; }
+.legal-page article a:focus-visible { outline: 2px solid #1688d4; outline-offset: 3px; }
+@media (max-width: 620px) { .legal-page > main { width: min(100% - 28px, 820px); padding: 38px 0 52px; }.legal-page h1 { font-size: 31px; }.legal-page article { margin-top: 20px; padding: 26px 20px; }.legal-page article section + section { margin-top: 23px; padding-top: 23px; }.legal-page h2 { font-size: 17px; }.legal-page article p, .legal-page article ul { font-size: 14px; line-height: 1.7; } }
+

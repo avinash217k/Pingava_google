@@ -140,10 +140,10 @@ export function initializeAnalytics() {
 
   if (posthogKey && typeof window !== 'undefined') {
     // Official PostHog asynchronous web loader
-    !(function (t: Document, e: any) {
+    (function (t: Document, e: any) {
       var o, n, p, r;
       e.__SV ||
-        ((window.posthog = e),
+        (((window as any).posthog = e),
         (e._i = []),
         (e.init = function (i: string, s: any, a: string) {
           function g(t: any, e: any) {
@@ -185,18 +185,21 @@ export function initializeAnalytics() {
         (e.__SV = 1.0));
     })(document, (window as any).posthog || []);
 
-    window.posthog.init(posthogKey, {
-      api_host: posthogHost,
-      person_profiles: 'identified_only',
-      capture_pageview: false,
-      session_recording: {
-        recordCrossOriginIframes: true,
-        maskAllInputs: false,
-      },
-    });
+    const ph = (window as any).posthog;
+    if (ph && typeof ph.init === 'function') {
+      ph.init(posthogKey, {
+        api_host: posthogHost,
+        person_profiles: 'identified_only',
+        capture_pageview: false,
+        session_recording: {
+          recordCrossOriginIframes: true,
+          maskAllInputs: false,
+        },
+      });
 
-    if (typeof window.posthog.startSessionRecording === 'function') {
-      window.posthog.startSessionRecording();
+      if (typeof ph.startSessionRecording === 'function') {
+        ph.startSessionRecording();
+      }
     }
   }
 }

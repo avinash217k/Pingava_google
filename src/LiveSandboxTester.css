@@ -1,0 +1,309 @@
+.sandbox-tester-container {
+  max-width: 900px;
+  margin: 3.5rem auto 2rem auto;
+  padding: 0 1rem;
+}
+
+.sandbox-tester-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.sandbox-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #34d399;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  margin-bottom: 1rem;
+}
+
+.sandbox-tester-title {
+  font-size: 2.1rem;
+  font-weight: 800;
+  color: #f8fafc;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.75rem 0;
+}
+
+.sandbox-tester-desc {
+  font-size: 1.05rem;
+  color: #94a3b8;
+  max-width: 660px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+.sandbox-form-card {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7), 0 0 30px -10px rgba(56, 189, 248, 0.1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.sandbox-input-group {
+  display: flex;
+  gap: 0.75rem;
+  position: relative;
+}
+
+@media (max-width: 640px) {
+  .sandbox-input-group {
+    flex-direction: column;
+  }
+}
+
+.sandbox-input-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.sandbox-input-icon {
+  position: absolute;
+  left: 1.1rem;
+  color: #64748b;
+  pointer-events: none;
+}
+
+.sandbox-input {
+  width: 100%;
+  background: rgba(2, 6, 23, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.95rem;
+  padding: 0.9rem 1rem 0.9rem 2.85rem;
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.sandbox-input:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+}
+
+.sandbox-submit-btn {
+  background: linear-gradient(135deg, #0284c7, #2563eb);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 0 1.75rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: opacity 0.2s, transform 0.2s;
+  white-space: nowrap;
+  min-height: 48px;
+}
+
+.sandbox-submit-btn:hover:not(:disabled) {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.sandbox-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sandbox-presets-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.sandbox-preset-chip {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  padding: 0.25rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sandbox-preset-chip:hover {
+  background: rgba(56, 189, 248, 0.1);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+/* Rate Limit Alert */
+.sandbox-alert-card {
+  margin-top: 1.25rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  padding: 0.9rem 1.25rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Terminal Card */
+.sandbox-terminal-card {
+  margin-top: 1.5rem;
+  background: #090d16;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.7);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.sandbox-terminal-header {
+  background: #111827;
+  padding: 0.65rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sandbox-terminal-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.sandbox-terminal-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+.sandbox-terminal-dot.red { background: #ff5f56; }
+.sandbox-terminal-dot.yellow { background: #ffbd2e; }
+.sandbox-terminal-dot.green { background: #27c93f; }
+
+.sandbox-terminal-title {
+  color: #94a3b8;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+.sandbox-terminal-body {
+  padding: 1.25rem 1.4rem;
+  color: #cbd5e1;
+  font-size: 0.88rem;
+  line-height: 1.7;
+}
+
+.sandbox-terminal-command {
+  color: #38bdf8;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sandbox-terminal-command span.prompt {
+  color: #34d399;
+}
+
+.sandbox-terminal-metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.sandbox-terminal-metrics-table td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.sandbox-terminal-metrics-table td.metric-label {
+  color: #94a3b8;
+  width: 38%;
+}
+
+.sandbox-terminal-metrics-table td.metric-value {
+  color: #f1f5f9;
+  font-weight: 600;
+}
+
+.sandbox-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.sandbox-badge.status-2xx {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.sandbox-badge.status-3xx {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.sandbox-badge.status-4xx, .sandbox-badge.status-5xx {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.sandbox-terminal-footer {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.sandbox-terminal-footer p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.sandbox-cta-link {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #ffffff !important;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.86rem;
+  padding: 0.55rem 1.1rem;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: transform 0.2s, opacity 0.2s;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.sandbox-cta-link:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}

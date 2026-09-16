@@ -1,0 +1,310 @@
+/* ==========================================================================
+   Pingava Live Dogfooding Edge Telemetry Widget (Visual Masterpiece Edition)
+   Strictly scoped under .df-root to prevent any CSS collision
+   ========================================================================== */
+
+.df-root {
+  max-width: 920px;
+  width: 100%;
+  margin: 2.25rem auto 3rem auto;
+  position: relative;
+  z-index: 10;
+}
+
+/* Ambient glow beneath the widget */
+.df-glow-backdrop {
+  position: absolute;
+  top: -10px;
+  left: 5%;
+  right: 5%;
+  bottom: -10px;
+  background: radial-gradient(ellipse at center, rgba(56, 189, 248, 0.12) 0%, rgba(16, 185, 129, 0.08) 45%, transparent 70%);
+  filter: blur(24px);
+  pointer-events: none;
+  z-index: 0;
+  border-radius: 20px;
+}
+
+.df-widget-container {
+  position: relative;
+  z-index: 1;
+  background: linear-gradient(180deg, rgba(13, 22, 41, 0.92) 0%, rgba(8, 14, 28, 0.95) 100%) !important;
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-radius: 16px;
+  padding: 1.25rem 1.65rem 1.35rem;
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.8),
+              0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+              0 0 30px -5px rgba(56, 189, 248, 0.12);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.df-widget-container:hover {
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 25px 50px -15px rgba(0, 0, 0, 0.9),
+              0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+              0 0 45px -5px rgba(56, 189, 248, 0.22);
+  transform: translateY(-2px);
+}
+
+/* Header Bar */
+.df-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  padding-bottom: 0.95rem;
+  margin-bottom: 1.15rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.df-status-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.df-pulse-wrapper {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.df-pulse-core {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 10px #10b981;
+}
+
+.df-pulse-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid #10b981;
+  animation: dfPulse 2s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+}
+
+@keyframes dfPulse {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  75% { transform: scale(2.2); opacity: 0; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+.df-title-text {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #ffffff !important;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.df-title-highlight {
+  background: linear-gradient(135deg, #ffffff 0%, #38bdf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.df-uptime-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  font-size: 0.74rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
+}
+
+.df-meta-timestamp {
+  font-size: 0.78rem;
+  color: #94a3b8 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.df-meta-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #64748b;
+  display: inline-block;
+}
+
+/* 4-Node Regional Grid */
+.df-nodes-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 0.9rem;
+  width: 100%;
+}
+
+@media (max-width: 860px) {
+  .df-nodes-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .df-nodes-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Individual Regional Node Card (Forces Deep Dark High-Contrast Aesthetic) */
+.df-node-card {
+  background: rgba(15, 23, 42, 0.88) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  border-radius: 11px !important;
+  padding: 0.85rem 1rem !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.6rem !important;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.df-node-card:hover {
+  background: rgba(22, 33, 62, 0.95) !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 16px rgba(56, 189, 248, 0.15);
+}
+
+.df-node-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: #10b981;
+  opacity: 0.8;
+}
+
+.df-node-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.df-node-name-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  text-align: left;
+}
+
+.df-node-name {
+  font-size: 0.84rem !important;
+  font-weight: 700 !important;
+  color: #f8fafc !important;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.df-node-loc {
+  font-size: 0.72rem !important;
+  color: #94a3b8 !important;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.df-node-latency-pill {
+  font-size: 0.82rem !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-weight: 800 !important;
+  color: #38bdf8 !important;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.df-node-latency-pill.ultra-fast {
+  color: #34d399 !important;
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.df-node-latency-pill.intercontinental {
+  color: #a78bfa !important;
+  background: rgba(167, 139, 250, 0.12);
+  border-color: rgba(167, 139, 250, 0.3);
+}
+
+/* Horizontal Progress Bar */
+.df-bar-track {
+  height: 5px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.df-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #10b981 0%, #38bdf8 100%);
+  transition: width 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+.df-bar-fill.warm {
+  background: linear-gradient(90deg, #38bdf8 0%, #818cf8 100%);
+}
+
+.df-bar-fill.intercontinental {
+  background: linear-gradient(90deg, #818cf8 0%, #c084fc 100%);
+}
+
+/* Skeleton Loading State */
+.df-skeleton-node {
+  background: rgba(15, 23, 42, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 11px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.df-skeleton-text {
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.03) 75%);
+  background-size: 200% 100%;
+  animation: dfShimmer 1.5s infinite;
+}
+
+.df-skeleton-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+@keyframes dfShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

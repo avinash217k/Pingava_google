@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Clock3,
   Code2,
+  Download,
   Globe2,
   HelpCircle,
   Mail,
@@ -102,7 +103,7 @@ function PricingView() {
         "Multi-region edge probes (US, EU, AP)",
         "JSON Path payload assertions",
         "SSL expiry alerts (30, 14, 7 days)",
-        "Webhooks, Slack & PagerDuty alerts",
+        "Telegram, Slack, Discord & Webhook alerts",
         "1-year high-resolution metrics retention",
         "Predictive Latency Anomaly Radar",
       ],
@@ -120,7 +121,7 @@ function PricingView() {
         "15-second check intervals",
         "Unlimited custom status pages",
         "Subscriber email & webhook broadcasts",
-        "Gemini AI automated incident post-mortems",
+        "AI automated incident post-mortems",
         "API contract drift guardian & schema checks",
         "Multi-region quorum consensus rules",
         "Team seats with role-based access",
@@ -165,8 +166,8 @@ function PricingView() {
       a: "No credit card is required. You can sign up with your email or Google account and begin monitoring up to 5 endpoints immediately for free.",
     },
     {
-      q: "How does the Gemini AI post-mortem feature work?",
-      a: "When an incident resolves, our Gemini AI diagnostic engine synthesizes the failed HTTP codes, error payloads, response latency timeline, and probe locations into an exportable, executive-ready post-mortem report in markdown.",
+      q: "How does the AI post-mortem feature work?",
+      a: "When an incident resolves, our AI diagnostic engine synthesizes the failed HTTP codes, error payloads, response latency timeline, and probe locations into an exportable, executive-ready post-mortem report in markdown.",
     },
   ]
 
@@ -274,15 +275,15 @@ function PricingView() {
               <tr>
                 <td><strong>Alert Channels</strong></td>
                 <td>Email</td>
-                <td>Email, Webhook, Slack</td>
-                <td>PagerDuty, Webhooks</td>
+                <td>Email, Telegram, Slack, Discord</td>
+                <td>PagerDuty, Webhooks, SMS</td>
                 <td>Custom Integrations</td>
               </tr>
               <tr>
                 <td><strong>AI Root Cause Post-Mortems</strong></td>
                 <td>—</td>
                 <td>Standard</td>
-                <td>Gemini 2.0 Pro</td>
+                <td>Advanced AI</td>
                 <td>Custom Prompting</td>
               </tr>
               <tr>
@@ -526,11 +527,11 @@ function ChangelogView() {
       version: "v2.4.0",
       date: "September 2026",
       tag: "feature",
-      title: "Multi-Region Edge Probes & Predictive Latency Radar",
-      desc: "Expanded global synthetic probe network across 6 regions with real-time latency anomaly detection.",
+      title: "6-Region Edge Probes & Predictive Latency Radar",
+      desc: "Expanded global synthetic probe network across 6 regions with real-time latency anomaly detection and jitter tracking.",
       bullets: [
-        "Simultaneous synthetic probing from US-East, US-West, EU-Central, EU-West, AP-South, and AP-East.",
-        "Predictive Latency Anomaly Radar flagging p95 degradation before outages trigger.",
+        "Distributed synthetic probing across US-East (Virginia), US-West (Oregon), EU-Central (Frankfurt), EU-West (London), AP-South (Mumbai), and AP-East (Singapore).",
+        "Predictive Latency Anomaly Radar flagging p95 degradation before outright outages trigger.",
         "Edge waterfalls highlighting DNS lookup, TCP connect, and TLS handshake times per geography.",
       ],
     },
@@ -538,11 +539,11 @@ function ChangelogView() {
       version: "v2.3.0",
       date: "August 2026",
       tag: "feature",
-      title: "Gemini AI Automated Incident Post-Mortems",
+      title: "AI Automated Incident Post-Mortems",
       desc: "One-click post-mortem generator turning raw incident error logs and timelines into polished markdown reports.",
       bullets: [
         "Automatic synthesis of HTTP failure status codes, request bodies, and edge timestamps.",
-        "Root cause diagnostic breakdown highlighting server, networking, or certificate root causes.",
+        "Root cause diagnostic breakdown distinguishing server crashes, transit timeouts, or SSL expiry.",
         "Instant export to markdown for GitHub, Notion, or executive status distributions.",
       ],
     },
@@ -551,23 +552,23 @@ function ChangelogView() {
       date: "July 2026",
       tag: "improvement",
       title: "SSL / TLS Certificate Guardian & Expiry Warning Tiers",
-      desc: "Complete overhaul of HTTPS certificate auditing with automated alerts and chain analysis.",
+      desc: "Complete overhaul of HTTPS certificate auditing with automated multi-tier alerts and chain analysis.",
       bullets: [
-        "Configurable advance expiry alerts at 30 days, 14 days, 7 days, and 24 hours.",
-        "Subject Alternative Name (SAN) coverage verification for multi-tenant and wildcard hosts.",
-        "TLS handshake timing benchmarks and cipher suite deprecation alerts.",
+        "Multi-tier notifications at 30, 14, 7, and 1 days before certificate expiration.",
+        "Intermediate and root CA trust chain validation with SAN hostname verification.",
+        "Automated revocation checking via OCSP and CRL distribution points.",
       ],
     },
     {
       version: "v2.1.0",
       date: "June 2026",
       tag: "feature",
-      title: "Custom Status Pages 2.0 & CNAME Support",
-      desc: "Deliver transparent communication on your own custom domain with subscriber broadcasts.",
+      title: "Public Status Page Customization & Subscriber Broadcasts",
+      desc: "Branded public incident communication with custom subdomains, logos, and subscriber email management.",
       bullets: [
-        "Custom domain support (e.g. status.yourdomain.com) with automatic Let's Encrypt SSL.",
-        "Email subscription double-opt-in workflows with zero friction.",
-        "Custom brand logo and dark/light color schemes for public pages.",
+        "Zero-configuration dark and light mode themes with custom company branding.",
+        "Email subscriber broadcast management with one-click subscription management.",
+        "Component-level status decoupling for microservices architectures.",
       ],
     },
     {
@@ -575,9 +576,9 @@ function ChangelogView() {
       date: "May 2026",
       tag: "improvement",
       title: "Next-Gen Synthetic Monitoring Engine & Zero-Noise Thresholds",
-      desc: "Built from scratch for sub-second check dispatching and rock-solid consecutive failure confirmation.",
+      desc: "Sub-minute check dispatching with consecutive failure confirmation rules.",
       bullets: [
-        "Consecutive failure rules (1-5 checks) guaranteeing zero false positives from transit blips.",
+        "Consecutive failure rules (1-5 checks) preventing false positives from transit blips.",
         "JSON Path payload assertions and regex matching on response content.",
         "New REST API v1 for programmatic monitor creation and incident queries.",
       ],
@@ -623,9 +624,18 @@ function BlogView() {
       date: "September 2026",
       title: "Designing Zero-Overhead Multi-Region Synthetic Probes at Scale",
       excerpt:
-        "How we engineered distributed edge probe nodes across 6 continents to run deterministic synthetic HTTP checks without false alerts caused by transient BGP flapping.",
-      content:
-        "When running continuous synthetic checks for hundreds of thousands of customer endpoints, transient network transit blips are inevitable. A single edge node in Frankfurt observing a DNS timeout does not necessarily mean your application is down. In this engineering deep-dive, we share how Pingava utilizes multi-region quorum consensus and consecutive failure confirmations to ensure developers are only paged when genuine incidents strike.",
+        "How we engineered distributed edge probe nodes across 6 global regions to run deterministic synthetic HTTP checks without false alerts caused by transient BGP flapping.",
+      content: [
+        "When running continuous synthetic checks for production endpoints, transient network transit blips are an inescapable reality of the public internet. A single edge node in Frankfurt observing a DNS timeout or TCP packet drop does not necessarily mean your origin server is down. In the majority of cases, it represents local ISP route flapping, transient BGP convergence delays, or third-party transit carrier degradation.",
+        "If monitoring systems immediately open an incident and page on-call engineers on the very first failed packet, alert fatigue quickly destroys team morale. Engineers begin muting notifications, which eventually leads to real, catastrophic outages slipping past unnoticed.",
+        "At Pingava, we solved this by implementing multi-region quorum consensus coupled with consecutive failure verification. Instead of evaluating a check in isolation, a suspected failure from one probe triggers a verification round across peer nodes in Virginia, Oregon, Frankfurt, London, Mumbai, and Singapore. Only when a quorum of distinct geographic vantage points confirms consecutive failed attempts does the system escalate to an alert.",
+        "Furthermore, our probe architecture dissects every HTTP transaction into high-resolution timing phases: DNS resolution time, TCP handshake latency, TLS negotiation, and Time to First Byte (TTFB). This granularity allows engineers to instantly distinguish an origin server crash (HTTP 500/502) from an upstream routing bottleneck or an expired SSL certificate."
+      ],
+      takeaways: [
+        "Single-probe alerts produce high false-positive rates due to transient BGP route flapping.",
+        "Multi-region quorum consensus eliminates alert noise by confirming reachability across independent geographies.",
+        "Breaking down latency into DNS, TCP, TLS, and TTFB pinpoints the exact failure layer before diving into logs."
+      ]
     },
     {
       id: 2,
@@ -635,8 +645,17 @@ function BlogView() {
       title: "Why 99.9% Uptime Is No Longer Enough: Surviving with Latency SLAs",
       excerpt:
         "Modern cloud users don't differentiate between an HTTP 500 error and a 12-second hanging request. Here is how p95/p99 latency monitoring protects user trust.",
-      content:
-        "Traditional uptime monitoring relied solely on binary status codes: 200 meant healthy, 500 meant down. However, in distributed cloud architectures, degradation almost always shows up first as latency tail-spikes. When downstream databases bottleneck, requests hang and saturate thread pools. We walk through how setting aggressive response time assertions and anomaly thresholds catches performance collapse before it turns into full downtime.",
+      content: [
+        "Traditional uptime monitoring relied solely on binary HTTP status codes: a response of 200 OK meant the service was healthy, while 500 meant it was down. However, in modern distributed cloud architectures and microservices, total outages are rarely binary. Instead, degradation almost always manifests first as severe latency tail spikes.",
+        "When an upstream database connection pool is saturated, or an external payment gateway begins rate-limiting, incoming requests do not fail immediately. They queue. Workers hang waiting for I/O, thread pools become exhausted, and response times balloon from 80ms to 12,000ms. From an end-user's perspective, a spinning loader that takes 15 seconds to timeout is indistinguishable from outright downtime.",
+        "To safeguard user experience, site reliability engineers must establish aggressive latency assertions alongside status code checks. Pingava allows teams to define strict SLA thresholds (such as failing checks that exceed 1,500ms even if they return HTTP 200).",
+        "By tracking p95 and p99 jitter trends over rolling 24-hour and 7-day windows, our Latency Anomaly Radar flags performance degradation long before origin worker pools collapse completely into HTTP 504 Gateway Timeouts."
+      ],
+      takeaways: [
+        "A slow response is practically an outage for users. Binary 200 OK checks give a false sense of reliability.",
+        "Thread pool exhaustion and database locks manifest as latency spikes long before HTTP 500s appear.",
+        "Enforcing maximum response time assertions prevents silent performance degradation from cascading."
+      ]
     },
     {
       id: 3,
@@ -646,8 +665,17 @@ function BlogView() {
       title: "The Anatomy of an SSL Expiry Outage (and How to Never Have One)",
       excerpt:
         "Over 60% of unforeseen production outages stem from expired certificates or misconfigured intermediate chains. Here is our checklist for automated SSL hygiene.",
-      content:
-        "Every seasoned engineering team has a war story about an expired SSL certificate on an API endpoint. Automated ACME renewals fail quietly when DNS records change or rate limits trigger. When an HTTPS certificate expires, modern browsers and mobile clients terminate the TLS handshake immediately. Continuous synthetic probing that parses the leaf, intermediate, and root certificates 30 days ahead of expiration is the only foolproof safeguard.",
+      content: [
+        "Every seasoned engineering team has a war story about an expired SSL certificate bringing down a critical API or production domain. Despite the widespread adoption of automated ACME clients like Let's Encrypt and cert-manager, SSL outages remain one of the most frequent causes of unplanned downtime.",
+        "Why does automation fail? Common culprits include: DNS-01 verification records being accidentally overwritten during DNS migrations; HTTP-01 challenge paths blocked by updated WAF rules; automated renewal webhooks hitting rate limits; and load balancers caching expired certificates in memory even after disk renewal.",
+        "When an SSL certificate expires, modern browsers, mobile SDKs, and API clients immediately abort the TLS handshake. There is no graceful degradation—every API call fails with SSL_ERROR_EXPIRED_CERTIFICATE.",
+        "Pingava's SSL Guardian checks your certificate chain on every synthetic run. It validates leaf validity, intermediate authority chains, and SAN hostnames. More importantly, it provides multi-tiered advance alerts at 30 days, 14 days, 7 days, and 24 hours, guaranteeing that renewal issues are identified weeks before traffic is impacted."
+      ],
+      takeaways: [
+        "Automated ACME renewals frequently break silently due to WAF rules or DNS changes.",
+        "Clients reject expired certificates immediately with hard network terminations.",
+        "Multi-tiered advance alerts (30, 14, 7 days) ensure team visibility before certificate expiry occurs."
+      ]
     },
     {
       id: 4,
@@ -656,9 +684,21 @@ function BlogView() {
       date: "June 2026",
       title: "Effective Incident Communication: What to Say on Your Public Status Page",
       excerpt:
-        "Proven templates and guidelines for Investigating, Identified, Monitoring, and Resolved updates that preserve trust when production fails.",
-      content:
-        "During an outage, silence is the worst possible customer experience. Transparent, calm, and accurate incident updates turn moments of service friction into demonstrations of competence. In this guide, we provide battle-tested templates for every stage of an incident lifecycle and discuss why separating internal diagnostics from external customer communications is crucial.",
+        "Proven templates and guidelines for Investigating, Identified, Monitoring, and Resolved updates that preserve customer trust when production fails.",
+      content: [
+        "During an outage, silence is the single most damaging choice an engineering team can make. When users encounter an error and see an empty status page stating 'All Systems Operational,' customer trust erodes instantly. Conversely, clear, calm, and transparent incident updates demonstrate operational maturity and respect for your users' workflows.",
+        "An effective incident lifecycle follows four distinct communication stages:",
+        "1. Investigating: Acknowledge the problem immediately. State which service or region is affected and confirm that engineers are actively diagnosing it. You do not need to know the root cause to post an initial update.",
+        "2. Identified: Explain the issue in clear, professional language without jargon. Provide an estimated timeline for the next update so customers are not left refreshing blindly.",
+        "3. Monitoring: Once a fix is deployed, keep the incident open under observation while metrics stabilize. Confirm that traffic has normalized across edge regions.",
+        "4. Resolved: Summarize the resolution clearly. Follow up with an automated AI-assisted post-mortem explaining what happened, how it was fixed, and what preventative measures are being implemented.",
+        "Pingava's hosted public status pages integrate directly with synthetic monitors and subscriber broadcast lists, allowing teams to deliver authentic, professional updates in seconds."
+      ],
+      takeaways: [
+        "Acknowledge issues immediately—silence during downtime damages customer trust more than the outage itself.",
+        "Use structured incident stages: Investigating, Identified, Monitoring, and Resolved.",
+        "Deliver subscriber email notifications so impacted customers receive updates directly without checking status pages."
+      ]
     },
     {
       id: 5,
@@ -668,8 +708,17 @@ function BlogView() {
       title: "Catching Silent API Contract Drift in Production Microservices",
       excerpt:
         "Why standard HTTP 200 OK checks fail to catch broken schema changes, and how JSON Path assertions protect API consumers.",
-      content:
-        "An API can return a 200 OK status code with an empty array or missing keys when an upstream backend schema changes unintentionally. Consumers fail immediately, but basic pingers report the service as healthy. By combining payload validation with JSON schema assertions in synthetic checks, engineers detect regression bugs before customer reports arrive.",
+      content: [
+        "A microservice can respond with an HTTP 200 OK status code while being completely broken for downstream consumers. For example, an unhandled database exception might return an empty JSON array `[]`, or a backend refactor might rename an essential property from `user_id` to `userId`.",
+        "Because the HTTP transport layer successfully returned a 200 OK, standard uptime pingers report the service as healthy. Meanwhile, mobile applications, web frontends, and webhook consumers crash with null-pointer or parsing exceptions.",
+        "To guarantee true API reliability, synthetic checks must validate the payload contract. Pingava provides deep JSON Path assertions, allowing engineers to verify expected keys, data types, and value constraints (e.g., `$.status == 'ok'`, `$.data.length > 0`).",
+        "By pairing response status checks with payload validation and response time thresholds, engineering teams detect contract drift and regression bugs seconds after deployment."
+      ],
+      takeaways: [
+        "HTTP 200 OK does not mean an API is healthy; empty payloads and renamed keys break consumers silently.",
+        "JSON Path assertions validate the structure, presence, and types of response properties.",
+        "Continuous payload inspection catches breaking schema drift before users encounter frontend errors."
+      ]
     },
   ]
 
@@ -698,6 +747,7 @@ function BlogView() {
             key={article.id}
             className="blog-card"
             onClick={() => setActiveArticle(article.id)}
+            style={{ cursor: "pointer" }}
           >
             <div>
               <div className="blog-card-meta">
@@ -720,7 +770,8 @@ function BlogView() {
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.6)",
+            background: "rgba(0,0,0,0.65)",
+            backdropFilter: "blur(4px)",
             display: "grid",
             placeItems: "center",
             padding: "24px",
@@ -730,13 +781,16 @@ function BlogView() {
         >
           <div
             style={{
-              maxWidth: "680px",
+              maxWidth: "740px",
               width: "100%",
+              maxHeight: "88vh",
+              overflowY: "auto",
               background: "var(--surface)",
               color: "var(--foreground)",
               padding: "36px",
               borderRadius: "12px",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.4)",
+              border: "1px solid var(--border)",
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -744,25 +798,38 @@ function BlogView() {
               const a = articles.find((art) => art.id === activeArticle)!
               return (
                 <>
-                  <span className="blog-tag-badge">{a.category} &middot; {a.readTime}</span>
-                  <h2 style={{ margin: "14px 0 16px", font: "700 24px Manrope, sans-serif" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                    <span className="blog-tag-badge">{a.category} &middot; {a.readTime}</span>
+                    <span style={{ fontSize: "13px", color: "var(--muted-foreground)" }}>{a.date}</span>
+                  </div>
+                  <h2 style={{ margin: "0 0 20px", font: "700 24px/1.3 'Manrope', sans-serif" }}>
                     {a.title}
                   </h2>
-                  <p style={{ lineHeight: "1.75", color: "var(--muted-foreground)" }}>
-                    {a.content}
-                  </p>
-                  <p style={{ lineHeight: "1.75", color: "var(--muted-foreground)", marginTop: "14px" }}>
-                    Continuous synthetic probing is standard practice for modern cloud teams.
-                    Explore how Pingava automates this with multi-region edge inspections and
-                    automated incident notifications.
-                  </p>
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "24px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "16px", color: "var(--muted-foreground)", fontSize: "15px", lineHeight: "1.75" }}>
+                    {a.content.map((p, idx) => (
+                      <p key={idx} style={{ margin: 0 }}>{p}</p>
+                    ))}
+                  </div>
+
+                  {a.takeaways && (
+                    <div style={{ marginTop: "24px", padding: "18px 20px", background: "rgba(8, 122, 75, 0.06)", borderLeft: "3px solid var(--primary)", borderRadius: "6px" }}>
+                      <strong style={{ color: "var(--foreground)", display: "block", marginBottom: "8px", fontSize: "14px" }}>Key Takeaways:</strong>
+                      <ul style={{ margin: 0, paddingLeft: "18px", color: "var(--foreground)", fontSize: "14px", lineHeight: "1.6" }}>
+                        {a.takeaways.map((t, idx) => (
+                          <li key={idx} style={{ marginBottom: "4px" }}>{t}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "28px", paddingTop: "20px", borderTop: "1px solid var(--border)" }}>
+                    <span style={{ fontSize: "13px", color: "var(--muted-foreground)" }}>Written by <strong>Pingava Reliability Team</strong></span>
                     <button
                       type="button"
                       className="primary-btn"
                       onClick={() => setActiveArticle(null)}
                     >
-                      Close article
+                      Close Article
                     </button>
                   </div>
                 </>
@@ -788,7 +855,7 @@ function StatusView() {
     { name: "Asia-Pacific Edge Probes", loc: "AP-South (MUM), AP-East (SIN)", uptime: "100.0%" },
     { name: "Synthetic Check Dispatch Engine", loc: "Distributed Core Cluster", uptime: "99.99%" },
     { name: "Alert Delivery Network", loc: "Email & Webhook Relays", uptime: "100.0%" },
-    { name: "Gemini AI Post-Mortem Service", loc: "Diagnostic Pipeline", uptime: "100.0%" },
+    { name: "AI Post-Mortem Service", loc: "Diagnostic Pipeline", uptime: "100.0%" },
     { name: "Public Status Pages CDN", loc: "Global Anycast Edge", uptime: "100.0%" },
     { name: "Web Dashboard & API Ingestion", loc: "Core Platform", uptime: "99.99%" },
   ]
@@ -930,7 +997,7 @@ function DocsView() {
     },
     {
       title: "Incidents & Webhook Integrations",
-      desc: "Deliver signed JSON webhook payloads to Slack, PagerDuty, or custom backend services.",
+      desc: "Deliver formatted alerts to Telegram, Slack, Discord, PagerDuty, or custom HTTPS endpoints.",
       link: "/support#webhooks",
       icon: Bell,
     },
@@ -986,59 +1053,194 @@ function AboutView() {
     <>
       <div className="about-stats-grid">
         <div className="about-stat-card">
-          <div className="about-stat-num">12M+</div>
-          <div className="about-stat-label">Monthly Synthetic Checks</div>
+          <div className="about-stat-num">6 Regions</div>
+          <div className="about-stat-label">Global Synthetic Edge Probes</div>
         </div>
         <div className="about-stat-card">
-          <div className="about-stat-num">42</div>
-          <div className="about-stat-label">Global Probe Edge Points</div>
+          <div className="about-stat-num">15s &ndash; 30s</div>
+          <div className="about-stat-label">Sub-Minute Check Intervals</div>
+        </div>
+        <div className="about-stat-card">
+          <div className="about-stat-num">Quorum</div>
+          <div className="about-stat-label">Consecutive Failure Confirmation</div>
         </div>
         <div className="about-stat-card">
           <div className="about-stat-num">99.99%</div>
-          <div className="about-stat-label">Platform Availability SLA</div>
-        </div>
-        <div className="about-stat-card">
-          <div className="about-stat-num">&lt; 100ms</div>
-          <div className="about-stat-label">Average Check Dispatch Latency</div>
+          <div className="about-stat-label">Core Dispatcher &amp; Ingestion SLA</div>
         </div>
       </div>
 
-      <Section title="Our Mission">
+      <Section title="Our Story &amp; Mission">
         <p>
-          Modern web applications and APIs are complex distributed systems. A single failing
-          microservice, an unexpected DNS failure, or a quietly expired SSL certificate can cause
-          catastrophic downtime before engineering teams notice.
+          Pingava was founded by engineers who experienced first-hand the acute pain of monitoring fatigue:
+          inboxes inundated with false alarms at 3 AM caused by single-hop transit hiccups, while critical
+          silent degradations&mdash;such as API contract drift, latency tail-spikes, and expiring SSL certificates&mdash;slipped
+          past unnoticed until frustrated users reported them.
         </p>
         <p>
-          Pingava was created with a single uncompromising mission: <strong>eliminate silent downtime</strong>.
-          We combine distributed multi-region synthetic probes, zero-noise confirmation algorithms,
-          and transparent public status communication so teams know what is happening before their users do.
+          We created Pingava with a singular, uncompromising mission: <strong>eliminate silent downtime</strong>.
+          By combining distributed multi-region edge probes, zero-noise confirmation algorithms, deep API payload
+          validation, and transparent public status communication, we ensure engineering teams know exactly what is
+          happening across their stack before their users do.
         </p>
       </Section>
 
-      <Section title="Engineering Values">
+      <Section title="Our Architectural Principles">
         <div className="public-principles">
           <article>
-            <h3>Zero False Alarms</h3>
+            <h3>External Edge Vantage Points</h3>
             <p>
-              Alert fatigue destroys on-call morale. We enforce consecutive failure rules and
-              multi-region quorum consensus to ensure you are only paged when genuine issues occur.
+              Internal agent metrics cannot tell you if public users can reach your service. Pingava probes your
+              endpoints from outside your firewall across North America, Europe, and Asia-Pacific, dissecting every
+              request into DNS resolution, TCP connection, TLS handshake, and Time to First Byte (TTFB).
             </p>
           </article>
           <article>
-            <h3>Radical Transparency</h3>
+            <h3>Zero-Noise Outage Confirmation</h3>
             <p>
-              When systems fail, honest and immediate communication builds customer trust. Our public
-              status pages and AI post-mortems turn operational challenges into demonstrations of reliability.
+              Alert fatigue destroys on-call morale. We enforce consecutive failure rules and multi-region quorum
+              consensus before triggering notifications, ensuring your engineers are paged only for genuine production
+              outages rather than transient internet hiccups.
             </p>
           </article>
           <article>
-            <h3>Developer-First Simplicity</h3>
+            <h3>Deep API &amp; SSL Hygiene</h3>
             <p>
-              Powerful observability should not require weeks of enterprise onboarding or heavy agents.
-              Pingava is ready in 60 seconds with pure HTTP synthetics.
+              A 200 OK status code does not mean your API is healthy. We validate response payload schemas with
+              JSON Path assertions, audit TLS certificate chains continuously, and dispatch multi-tiered advance
+              warnings (30, 14, 7 days) before certificates expire.
             </p>
           </article>
+          <article>
+            <h3>Radical Operational Transparency</h3>
+            <p>
+              When production incidents occur, honest and immediate communication preserves customer trust. Our hosted
+              public status pages, subscriber email broadcasts, and AI-assisted post-mortems turn operational challenges
+              into demonstrations of engineering maturity.
+            </p>
+          </article>
+        </div>
+      </Section>
+
+      <Section title="Official Brand Identity &amp; Logo Assets">
+        <p>
+          Download official Pingava brand assets, vector marks, app icons, and favicons for press kits, light and dark backgrounds, print media, and third-party integrations.
+        </p>
+        <div className="brand-kit-grid">
+          {/* 1. Primary Brand Logo */}
+          <div className="brand-kit-card">
+            <div className="brand-kit-preview dark-bg">
+              <img src="/pingava-logo.png" alt="Pingava Primary Brand Logo" />
+            </div>
+            <div className="brand-kit-info">
+              <div className="brand-kit-badge">Primary Brand Logo</div>
+              <h4>Full Logo (Dark Background)</h4>
+              <p>Icon + Pingava wordmark + &ldquo;KNOW BEFORE YOUR USERS DO&rdquo; tagline.</p>
+              <span className="brand-kit-meta">1024 &times; 768 &middot; Dark PNG / Web</span>
+              <a href="/pingava-logo.png" download="pingava-logo.png" className="secondary-btn download-btn">
+                <Download size={14} /> Download Logo
+              </a>
+            </div>
+          </div>
+
+          {/* 2. Icon Only / Brand Mark */}
+          <div className="brand-kit-card">
+            <div className="brand-kit-preview transparent-grid">
+              <img src="/pingava-mark.png" alt="Pingava Icon Only Brand Mark" />
+            </div>
+            <div className="brand-kit-info">
+              <div className="brand-kit-badge">Icon Only / Brand Mark</div>
+              <h4>Circular Monitoring Ring &amp; Node</h4>
+              <p>Transparent circular monitoring ring with radar pulse ripples.</p>
+              <span className="brand-kit-meta">1254 &times; 1254 &middot; Transparent RGBA</span>
+              <a href="/pingava-mark.png" download="pingava-mark.png" className="secondary-btn download-btn">
+                <Download size={14} /> Download Mark
+              </a>
+            </div>
+          </div>
+
+          {/* 3. Light Background Logo */}
+          <div className="brand-kit-card">
+            <div className="brand-kit-preview light-bg">
+              <img src="/pingava-logo-light.png" alt="Pingava Light Background Logo" />
+            </div>
+            <div className="brand-kit-info">
+              <div className="brand-kit-badge">Light Background Logo</div>
+              <h4>Full Logo (Light Background)</h4>
+              <p>Colored monitoring mark + dark navy wordmark + tagline.</p>
+              <span className="brand-kit-meta">1024 &times; 768 &middot; Light PNG</span>
+              <a href="/pingava-logo-light.png" download="pingava-logo-light.png" className="secondary-btn download-btn">
+                <Download size={14} /> Download Logo
+              </a>
+            </div>
+          </div>
+
+          {/* 4. Monochrome Logo */}
+          <div className="brand-kit-card">
+            <div className="brand-kit-preview mono-bg">
+              <img src="/pingava-logo-mono.png" alt="Pingava Monochrome Logo" />
+            </div>
+            <div className="brand-kit-info">
+              <div className="brand-kit-badge">Monochrome Logo</div>
+              <h4>Single-Color High Contrast</h4>
+              <p>Pure white logo on solid black for printing, watermarks, and legal docs.</p>
+              <span className="brand-kit-meta">1024 &times; 768 &middot; Solid Black / White</span>
+              <a href="/pingava-logo-mono.png" download="pingava-logo-mono.png" className="secondary-btn download-btn">
+                <Download size={14} /> Download Mono
+              </a>
+            </div>
+          </div>
+
+          {/* 5. App Icon */}
+          <div className="brand-kit-card">
+            <div className="brand-kit-preview dark-bg">
+              <img src="/pingava-app-icon.png" alt="Pingava App Icon" style={{ width: 100, height: 100, borderRadius: 20 }} />
+            </div>
+            <div className="brand-kit-info">
+              <div className="brand-kit-badge">App Icon</div>
+              <h4>Squircle Container Icon</h4>
+              <p>Icon inside rounded container for PWA, mobile apps, and macOS.</p>
+              <span className="brand-kit-meta">512 &times; 512 &middot; Apple &amp; Android PWA</span>
+              <a href="/pingava-app-icon.png" download="pingava-app-icon.png" className="secondary-btn download-btn">
+                <Download size={14} /> Download App Icon
+              </a>
+            </div>
+          </div>
+
+          {/* 6. Favicon Sizes */}
+          <div className="brand-kit-card">
+            <div className="brand-kit-preview dark-bg" style={{ display: "flex", gap: "16px", alignItems: "center", justifyContent: "center" }}>
+              <img src="/favicon-64x64.png" alt="64px" width={48} height={48} />
+              <img src="/favicon-32x32.png" alt="32px" width={32} height={32} />
+              <img src="/favicon-16x16.png" alt="16px" width={16} height={16} />
+            </div>
+            <div className="brand-kit-info">
+              <div className="brand-kit-badge">Favicon Suite</div>
+              <h4>Multi-Resolution Favicons</h4>
+              <p>Optimized 64px, 48px, 32px, 16px, and multi-size .ico bundle.</p>
+              <span className="brand-kit-meta">64px / 32px / 16px &middot; .ico / PNG</span>
+              <a href="/favicon.ico" download="favicon.ico" className="secondary-btn download-btn">
+                <Download size={14} /> Download Favicon (.ico)
+              </a>
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Engineering Leadership &amp; Direct Access">
+        <p>
+          We are an engineering-led team obsessed with site reliability and distributed systems. We do not hide behind
+          opaque support queues&mdash;our founders and on-call reliability engineers are directly reachable:
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", marginTop: "16px" }}>
+          <a className="public-contact-email" href="mailto:connect@pingava.com">
+            <Mail size={18} />
+            connect@pingava.com
+          </a>
+          <a className="public-contact-email" href="mailto:support@pingava.com">
+            <Mail size={18} />
+            support@pingava.com
+          </a>
         </div>
       </Section>
     </>
@@ -1075,7 +1277,7 @@ function ContactView() {
       setTicketId(data.ticketId || `PG-${Math.floor(1000 + Math.random() * 9000)}`)
       setSent(true)
     } catch (err: any) {
-      setErrorMsg(err.message || "Failed to dispatch inquiry. Please email support@pingava.com directly.")
+      setErrorMsg(err.message || "Failed to dispatch inquiry. Please email support@pingava.com or connect@pingava.com directly.")
     } finally {
       setIsSubmitting(false)
     }
@@ -1084,34 +1286,43 @@ function ContactView() {
   return (
     <div className="contact-interactive-grid">
       <div>
-        <Section title="Direct Channels">
+        <Section title="Direct Engineering Channels">
           <p>
             Have a question about Pingava, need dedicated enterprise probe deployment, or
-            discovered a security issue? Our engineering and reliability team is ready to help.
+            discovered a security issue? Our engineering and reliability team is ready to assist you.
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px", margin: "20px 0" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", margin: "20px 0" }}>
             <a className="public-contact-email" href="mailto:support@pingava.com">
-              <Mail size={22} />
+              <Mail size={20} />
               support@pingava.com
             </a>
-            <p style={{ margin: "0 0 12px", fontSize: "13px", color: "var(--muted-foreground)" }}>
-              For technical support, active monitoring issues, and account assistance.
+            <p style={{ margin: "0 0 10px", fontSize: "13px", color: "var(--muted-foreground)" }}>
+              For technical support, monitor configuration questions, and active incident troubleshooting.
             </p>
 
             <a className="public-contact-email" href="mailto:connect@pingava.com">
-              <Mail size={22} />
+              <Mail size={20} />
               connect@pingava.com
             </a>
             <p style={{ margin: 0, fontSize: "13px", color: "var(--muted-foreground)" }}>
-              For general inquiries, enterprise contracts, and partnerships.
+              For general inquiries, enterprise contracts, custom probe requests, and partnerships.
             </p>
           </div>
+
+          <div style={{ padding: "14px 18px", background: "rgba(8, 122, 75, 0.06)", borderLeft: "3px solid var(--primary)", borderRadius: "6px", margin: "20px 0" }}>
+            <strong style={{ fontSize: "13px", color: "var(--foreground)", display: "block", marginBottom: "6px" }}>Fast Resolution Tip:</strong>
+            <p style={{ margin: 0, fontSize: "13px", color: "var(--muted-foreground)", lineHeight: "1.6" }}>
+              To help us diagnose issues on our very first response, please include your <strong>target URL</strong>,
+              affected <strong>probe region(s)</strong> (e.g. Frankfurt, Mumbai, Virginia), and observed <strong>HTTP status code</strong>.
+            </p>
+          </div>
+
           <div style={{ marginTop: "24px" }}>
-            <p><strong>Response Time Guarantees:</strong></p>
+            <p><strong>Response Time Commitments:</strong></p>
             <ul style={{ paddingLeft: "20px", color: "var(--muted-foreground)", fontSize: "14px", lineHeight: "1.7" }}>
-              <li><strong>Critical Outages / Security:</strong> &lt; 2 hours SLA</li>
-              <li><strong>General Product Inquiries:</strong> &lt; 24 hours</li>
-              <li><strong>Enterprise Sales & Custom Probes:</strong> Same-day follow-up</li>
+              <li><strong>Critical Incidents &amp; Security:</strong> &lt; 2 hours SLA</li>
+              <li><strong>General Technical Inquiries:</strong> &lt; 24 hours</li>
+              <li><strong>Enterprise &amp; Sales Inquiries:</strong> Same-day response</li>
             </ul>
           </div>
         </Section>
@@ -1121,11 +1332,11 @@ function ContactView() {
         {sent ? (
           <div className="contact-success-card">
             <CheckCircle2 size={36} color="#12b76a" style={{ margin: "0 auto" }} />
-            <h3>Message Dispatched</h3>
+            <h3>Inquiry Dispatched</h3>
             <p>
-              Thank you for reaching out to Pingava. Ticket <strong>#{ticketId}</strong> has
-              been created. Your inquiry has been routed to <strong>connect@pingava.com</strong> and
-              a confirmation copy has been sent to your work email (<strong>{email}</strong>).
+              Thank you for reaching out to Pingava. Ticket reference <strong>#{ticketId}</strong> has
+              been created. Your inquiry has been routed to our on-call team at <strong>connect@pingava.com</strong> and
+              an automated confirmation receipt was delivered to <strong>{email}</strong>.
             </p>
             <button
               type="button"
@@ -1137,21 +1348,24 @@ function ContactView() {
                 setMessage("")
               }}
             >
-              Send another message
+              Send Another Inquiry
             </button>
           </div>
         ) : (
           <form className="contact-form" onSubmit={handleSubmit}>
             <h3 style={{ margin: "0 0 4px", font: "700 18px 'Manrope', sans-serif" }}>
-              Send a direct inquiry
+              Send a Direct Inquiry
             </h3>
+            <p style={{ margin: "0 0 16px", fontSize: "13px", color: "var(--muted-foreground)" }}>
+              Messages are routed directly to our engineering on-call inbox.
+            </p>
             <label>
               Inquiry Type
               <select value={topic} onChange={(e) => setTopic(e.target.value)}>
-                <option value="Technical Support">Technical & Account Support</option>
-                <option value="Enterprise Sales">Enterprise & Custom Probe Regions</option>
+                <option value="Technical Support">Technical &amp; Account Support</option>
+                <option value="Enterprise Sales">Enterprise &amp; Custom Probe Regions</option>
                 <option value="Security Report">Security Disclosure / Vulnerability</option>
-                <option value="Billing">Billing & Subscription Inquiry</option>
+                <option value="Billing">Billing &amp; Subscription Inquiry</option>
                 <option value="Integration">Integration or Partnership</option>
               </select>
             </label>
@@ -1181,14 +1395,15 @@ function ContactView() {
               Message
               <textarea
                 required
-                placeholder="Please describe how we can assist your team..."
+                rows={4}
+                placeholder="Describe your issue or inquiry in detail..."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 disabled={isSubmitting}
               />
             </label>
             <button type="submit" className="primary-btn" style={{ justifySelf: "flex-start" }} disabled={isSubmitting}>
-              {isSubmitting ? "Sending inquiry..." : <>Send Inquiry <Send size={15} /></>}
+              {isSubmitting ? "Dispatching..." : <>Send Inquiry <Send size={15} /></>}
             </button>
             {errorMsg && (
               <p style={{ color: "var(--destructive)", fontSize: "13px", margin: "6px 0 0" }}>
@@ -1351,7 +1566,7 @@ function IncidentManagementView() {
               "Publish Investigating, Identified, Monitoring, or Resolved updates with timestamps, responder attribution, and public subscriber notifications.",
             ],
             [
-              "Gemini AI Root Cause Post-Mortems",
+              "AI Root Cause Post-Mortems",
               "Generate comprehensive incident post-mortems in seconds, synthesizing failed headers, codes, and MTTR breakdown.",
             ],
             [
@@ -1436,6 +1651,16 @@ const hero: Record<PublicPagePath, [string, string, string]> = {
     "HELP & SUPPORT",
     "Find your next step.",
     "Practical guidance for setting up monitors, understanding response assertions, configuring webhooks, and managing your Pingava workspace.",
+  ],
+  "/features": [
+    "SRE & OBSERVABILITY SUITE",
+    "Engineered to reduce false alarms and provide high-fidelity visibility.",
+    "Explore Pingava's 6-region edge inspector, predictive latency radar, automated API contract drift guardian, and instant AI root cause post-mortems.",
+  ],
+  "/demo": [
+    "ZERO-AUTH INTERACTIVE DEMO",
+    "Experience Pingava live without creating an account.",
+    "Explore pre-populated production monitors, global edge waterfalls, jitter radar analytics, and real incident post-mortem breakdowns.",
   ],
 }
 

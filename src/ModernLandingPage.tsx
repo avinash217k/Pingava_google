@@ -8,7 +8,6 @@ import {
   Code2,
   Globe2,
   LayoutDashboard,
-  Link2,
   Lock,
   Plus,
   Radio,
@@ -24,22 +23,14 @@ import { BrandMark } from './Brand'
 import { PageMetadata } from './Seo'
 import { PublicFooter } from './MarketingPages'
 import { dashboardHref } from './appConfig'
-import { runUptimeCheck, type UptimeCheckResult } from './uptimeCheck'
-import { userFacingError } from './api'
+import { DogfoodingStatusWidget } from './DogfoodingStatusWidget'
+import { LiveSandboxTester } from './LiveSandboxTester'
 import './ModernLandingPage.css'
 
 export type ShowcaseTab = 'overview' | 'edge' | 'radar' | 'contract' | 'aidiagnostics' | 'statuspage'
 
 export function ModernLandingPage() {
   const [activeTab, setActiveTab] = useState<ShowcaseTab>('overview')
-
-  // Live endpoint checker state
-  const [checkMode, setCheckMode] = useState<'website' | 'api'>('website')
-  const [url, setUrl] = useState('')
-  const [checkResult, setCheckResult] = useState<UptimeCheckResult | null>(null)
-  const [checkError, setCheckError] = useState('')
-  const [isChecking, setIsChecking] = useState(false)
-  const [checkedAt, setCheckedAt] = useState<Date | null>(null)
 
   // Interactive edge region selection in edge showcase
   const [selectedEdgeRegion, setSelectedEdgeRegion] = useState<string>('us-east-1')
@@ -49,36 +40,11 @@ export function ModernLandingPage() {
   const [simulatedStep, setSimulatedStep] = useState<number>(3)
   const [edgePopHover, setEdgePopHover] = useState<string>('iad')
 
-  const handleCheckSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!url.trim()) return
-    setIsChecking(true)
-    setCheckError('')
-    setCheckResult(null)
-    try {
-      const response = await runUptimeCheck(url, checkMode)
-      setUrl(response.url)
-      setCheckResult(response.result)
-      setCheckedAt(new Date())
-    } catch (err) {
-      setCheckError(userFacingError(err, 'Could not check this endpoint. Verify it is a public URL.'))
-      setCheckedAt(new Date())
-    } finally {
-      setIsChecking(false)
-    }
-  }
-
-  const setPresetUrl = (target: string) => {
-    setUrl(target)
-    setCheckError('')
-    setCheckResult(null)
-  }
-
   return (
     <div className="modern-landing">
       <PageMetadata
-        title="Pingava – Next-Gen Website & API Uptime Monitoring with SRE Radar & AI Diagnostics"
-        description="Continuous website and REST API synthetic monitoring, 6-region global edge inspector, predictive latency anomaly radar, API contract guardian, and Gemini AI root cause analysis."
+        title="Pingava – Know Before Your Users Do | Website & API Uptime Monitoring"
+        description="Monitor websites and APIs globally. Confirm real outages, catch performance problems, and know before your users do."
       />
 
       <div className="modern-landing-glow-1" />
@@ -98,7 +64,8 @@ export function ModernLandingPage() {
           <a href="#pingava-showcase" onClick={() => setActiveTab('radar')}>Latency Radar</a>
           <a href="#pingava-showcase" onClick={() => setActiveTab('contract')}>API Guardian</a>
           <a href="#pingava-showcase" onClick={() => setActiveTab('aidiagnostics')}>AI Diagnostics</a>
-          <a href="#uptime-checker">Live Checker</a>
+          <a href="#sandbox-probe">Live Sandbox</a>
+          <a href="/demo" style={{ color: '#38bdf8', fontWeight: 600 }}>Live Demo</a>
           <a href="#pricing">Pricing</a>
         </nav>
 
@@ -122,27 +89,36 @@ export function ModernLandingPage() {
 
         <h1 className="modern-hero-title">
           Next-Gen Uptime &amp; API Reliability. <br />
-          <span className="gradient-text">Engineered for Zero False Alarms.</span>
+          <span className="gradient-text">Engineered to Reduce False Alarms.</span>
         </h1>
 
         <p className="modern-hero-subtitle">
-          Continuous synthetic monitoring with multi-step failure confirmations, 6-region global edge waterfalls,
-          predictive latency jitter radar, automated API schema drift detection, and instant Gemini AI root cause synthesis.
+          Monitor websites and APIs globally. Confirm real outages, catch performance problems, and know before your users do.
+        </p>
+
+        <p className="modern-hero-capabilities">
+          Multi-region checks · API validation · Latency intelligence · AI diagnostics
         </p>
 
         <div className="modern-hero-cta">
           <a href={dashboardHref('/register')} className="modern-btn-primary" style={{ padding: '0.85rem 1.85rem', fontSize: '1rem' }}>
             Start Monitoring Free <ArrowRight size={17} />
           </a>
-          <a href="#uptime-checker" className="modern-btn-secondary" style={{ padding: '0.85rem 1.85rem', fontSize: '1rem' }}>
+          <a href="/demo" className="modern-btn-secondary" style={{ padding: '0.85rem 1.85rem', fontSize: '1rem' }}>
+            <LayoutDashboard size={16} style={{ color: '#38bdf8' }} /> View Live Demo
+          </a>
+          <a href="#sandbox-probe" className="modern-btn-secondary" style={{ padding: '0.85rem 1.85rem', fontSize: '1rem' }}>
             <Zap size={16} style={{ color: '#34d399' }} /> Test Endpoint Live
           </a>
         </div>
 
+        {/* Live Dogfooding Edge Status Widget directly beneath primary Hero CTA */}
+        <DogfoodingStatusWidget />
+
         <div className="modern-hero-proof">
           <span><ShieldCheck size={16} /> 15s to 60s checks</span>
-          <span><Globe2 size={16} /> 6 Global Edge Nodes</span>
-          <span><Sparkles size={16} style={{ color: '#34d399' }} /> Gemini AI Diagnostics</span>
+          <span><Globe2 size={16} /> 6 Global Edge Regions</span>
+          <span><Sparkles size={16} style={{ color: '#34d399' }} /> AI Diagnostics</span>
           <span><Radar size={16} style={{ color: '#60a5fa' }} /> Predictive Jitter Radar</span>
           <span><Lock size={16} /> SSL Expiry Guardian</span>
           <span><Bell size={16} /> $0 / Free Tier</span>
@@ -197,7 +173,7 @@ export function ModernLandingPage() {
             >
               <Sparkles size={15} style={{ color: '#10b981' }} />
               <span>AI Root Cause Diagnostics</span>
-              <span className="tab-badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#34d399' }}>Gemini</span>
+              <span className="tab-badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#34d399' }}>AI</span>
             </button>
             <button
               type="button"
@@ -350,7 +326,7 @@ export function ModernLandingPage() {
                     className="sim-stat-card"
                     style={{ cursor: 'pointer' }}
                     onClick={() => setActiveTab('aidiagnostics')}
-                    title="Click to view Gemini AI Root Cause Diagnostics"
+                    title="Click to view AI Root Cause Diagnostics"
                   >
                     <div className="sim-stat-icon amber">
                       <TriangleAlert size={18} />
@@ -483,7 +459,7 @@ export function ModernLandingPage() {
                     className="sim-table-row"
                     style={{ background: 'rgba(239, 68, 68, 0.05)', cursor: 'pointer' }}
                     onClick={() => setActiveTab('aidiagnostics')}
-                    title="Click to view Gemini AI Root Cause Diagnostics"
+                    title="Click to view AI Root Cause Diagnostics"
                   >
                     <div className="sim-monitor-name">
                       <span className="sim-monitor-dot down" />
@@ -854,7 +830,7 @@ export function ModernLandingPage() {
             </div>
           )}
 
-          {/* TAB 5: GEMINI AI ROOT CAUSE DIAGNOSTICS */}
+          {/* TAB 5: AI ROOT CAUSE DIAGNOSTICS */}
           {activeTab === 'aidiagnostics' && (
             <div className="sim-ai-view">
               <div className="sim-ai-card">
@@ -865,8 +841,8 @@ export function ModernLandingPage() {
                     </div>
                     <div>
                       <div className="sim-ai-tags">
-                        <h3>Gemini 3.8 Flash Failure Synthesis</h3>
-                        <span className="tag-model">Google AI</span>
+                        <h3>AI Failure Synthesis</h3>
+                        <span className="tag-model">AI Engine</span>
                         <span className="tag-conf">94% CONFIDENCE</span>
                         <span className="tag-origin">UPSTREAM INGRESS TIMEOUT</span>
                       </div>
@@ -1000,135 +976,10 @@ export function ModernLandingPage() {
         </div>
       </section>
 
-      {/* INTERACTIVE FREE ENDPOINT CHECKER */}
-      <section id="uptime-checker" className="modern-checker-section">
-        <div className="modern-section-pill">
-          <Zap size={14} /> Free Developer Diagnostic Tool
-        </div>
-        <h2 className="modern-section-title">Test your website or REST API right now</h2>
-        <p className="modern-section-desc">
-          Enter any public URL or API endpoint. We will ping it live from our global edge and report HTTP status,
-          response time, and SSL health — no account required.
-        </p>
-
-        <div className="modern-checker-box">
-          <div className="modern-checker-tabs">
-            <button
-              type="button"
-              className={`modern-checker-tab-btn ${checkMode === 'website' ? 'active' : ''}`}
-              onClick={() => setCheckMode('website')}
-            >
-              Website URL
-            </button>
-            <button
-              type="button"
-              className={`modern-checker-tab-btn ${checkMode === 'api' ? 'active' : ''}`}
-              onClick={() => setCheckMode('api')}
-            >
-              API Endpoint
-            </button>
-          </div>
-
-          <form onSubmit={handleCheckSubmit}>
-            <div className="modern-checker-input-row">
-              <div className="modern-checker-input-wrapper">
-                <Link2 size={18} />
-                <input
-                  type="text"
-                  className="modern-checker-input"
-                  placeholder={checkMode === 'website' ? 'example.com or https://yourdomain.com' : 'api.example.com/health'}
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  required
-                />
-              </div>
-              <button type="submit" className="modern-checker-submit-btn" disabled={isChecking}>
-                {isChecking ? (
-                  <>
-                    <RefreshCw size={16} className="spin" /> Checking...
-                  </>
-                ) : (
-                  <>
-                    Run Free Probe <ArrowRight size={16} />
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-
-          <div className="modern-checker-presets">
-            <span>Quick test:</span>
-            <button type="button" onClick={() => setPresetUrl('https://github.com')}>
-              github.com
-            </button>
-            <button type="button" onClick={() => setPresetUrl('https://stripe.com')}>
-              stripe.com
-            </button>
-            <button type="button" onClick={() => setPresetUrl('https://cloudflare.com')}>
-              cloudflare.com
-            </button>
-            <button type="button" onClick={() => setPresetUrl('https://httpbin.org/status/200')}>
-              httpbin (200 OK)
-            </button>
-          </div>
-
-          {/* Results Display */}
-          {checkError && (
-            <div className="modern-checker-result error">
-              <div className="modern-result-header">
-                <TriangleAlert size={22} color="#f87171" />
-                <div>
-                  <strong style={{ color: '#f87171', fontSize: '0.95rem' }}>Probe Failed</strong>
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: '#fca5a5' }}>{checkError}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {checkResult && (
-            <div className={`modern-checker-result ${checkResult.ok ? 'success' : 'error'}`}>
-              <div className="modern-result-header">
-                {checkResult.ok ? (
-                  <CheckCircle2 size={24} color="#34d399" />
-                ) : (
-                  <TriangleAlert size={24} color="#f87171" />
-                )}
-                <div>
-                  <strong style={{ color: checkResult.ok ? '#34d399' : '#f87171', fontSize: '1rem' }}>
-                    {checkResult.ok ? 'Endpoint is Healthy & Reachable' : 'Endpoint returned an issue'}
-                  </strong>
-                  <p style={{ margin: 0, fontSize: '0.8rem', color: '#94a3b8' }}>
-                    Checked {checkedAt?.toLocaleTimeString()} · Tested from global ping runner
-                  </p>
-                </div>
-              </div>
-
-              <div className="modern-result-stats">
-                <div className="modern-result-stat-item">
-                  <span>HTTP Status</span>
-                  <strong>{checkResult.status_code ? `HTTP ${checkResult.status_code}` : 'No response'}</strong>
-                </div>
-                <div className="modern-result-stat-item">
-                  <span>Response Time</span>
-                  <strong>{checkResult.response_time} ms</strong>
-                </div>
-                <div className="modern-result-stat-item">
-                  <span>Edge Health</span>
-                  <strong style={{ color: checkResult.ok ? '#34d399' : '#f87171' }}>
-                    {checkResult.ok ? 'Optimal' : 'Degraded'}
-                  </strong>
-                </div>
-                <div className="modern-result-stat-item">
-                  <span>Automate 24/7</span>
-                  <a href="/register" style={{ color: '#34d399', fontSize: '0.82rem', fontWeight: 700, marginTop: 4 }}>
-                    Start Monitoring Free &rarr;
-                  </a>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
+      {/* INTERACTIVE ZERO-AUTH LIVE SANDBOX TESTER */}
+      <div id="uptime-checker">
+        <LiveSandboxTester />
+      </div>
 
       {/* THE 6 CORE SERVICES OF PINGAVA (THE COMPLETE RELIABILITY SUITE) */}
       <section id="services" className="modern-bento-section">
@@ -1179,7 +1030,7 @@ export function ModernLandingPage() {
                   <div className="service-icon green">
                     <ShieldCheck size={22} />
                   </div>
-                  <span className="service-badge green">ZERO FALSE ALARMS</span>
+                  <span className="service-badge green">REDUCE FALSE ALARMS</span>
                 </div>
                 <h3>Zero-Noise Synthetic Monitoring</h3>
                 <p>
@@ -1429,7 +1280,7 @@ export function ModernLandingPage() {
             </div>
           )}
 
-          {/* Card 5: Gemini AI Root Cause Diagnostics */}
+          {/* Card 5: AI Root Cause Diagnostics */}
           {(serviceCategory === 'all' || serviceCategory === 'intelligence') && (
             <div className="modern-service-card">
               <div className="service-card-top">
@@ -1437,9 +1288,9 @@ export function ModernLandingPage() {
                   <div className="service-icon green" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399' }}>
                     <Sparkles size={22} />
                   </div>
-                  <span className="service-badge green">GEMINI 3.8 FLASH</span>
+                  <span className="service-badge green">AI DIAGNOSTICS</span>
                 </div>
-                <h3>Gemini AI Root Cause Diagnostics</h3>
+                <h3>AI Root Cause Diagnostics</h3>
                 <p>
                   Synthesize headers, response bodies, and latency spikes into actionable fixes in 1.2s.
                 </p>
@@ -1547,7 +1398,7 @@ export function ModernLandingPage() {
           </div>
           <h2 className="modern-section-title">50% to 70% more cost-effective than legacy tools</h2>
           <p className="modern-section-desc">
-            Stop paying $15 for only 10 monitors. Pingava gives you higher check frequency, 6 global edge nodes, and built-in AI diagnostics for less.
+            Stop paying $15 for only 10 monitors. Pingava gives you higher check frequency, 6 global edge regions, and built-in AI diagnostics for less.
           </p>
         </div>
 
@@ -1629,7 +1480,7 @@ export function ModernLandingPage() {
                 <td className="text-muted">✗ None</td>
               </tr>
               <tr>
-                <td>Gemini AI Root Cause Diagnostics</td>
+                <td>AI Root Cause Diagnostics</td>
                 <td className="highlight-col text-muted">—</td>
                 <td className="highlight-col-pro text-emerald font-bold">✓ Included</td>
                 <td className="text-muted">✗ None</td>
