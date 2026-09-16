@@ -724,7 +724,7 @@ export function injectPublicPageIntoHtml(baseHtml: string, pathname: string): st
   result = result.replace(/<meta\s+name="description"\s+content="[^"]*"\s*\/?>/i, `<meta name="description" content="${safeDescription}" />`);
 
   // Replace Canonical
-  const canonicalUrl = `https://www.pingava.com${meta.canonicalPath === "/" ? "" : meta.canonicalPath}/`;
+  const canonicalUrl = `https://www.pingava.com${meta.canonicalPath === "/" ? "/" : meta.canonicalPath}`;
   if (/<link\s+rel="canonical"[^>]*>/i.test(result)) {
     result = result.replace(/<link\s+rel="canonical"[^>]*>/i, `<link rel="canonical" href="${canonicalUrl}" />`);
   } else {

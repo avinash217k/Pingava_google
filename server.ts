@@ -1496,12 +1496,24 @@ async function startServer() {
     next();
   });
 
-  // Redirect direct dashboard paths on www.pingava.com or pingava.com to dashboard.pingava.com
+  // Canonical apex-to-www permanent redirect for SEO consolidation (RFC 7231 / Google Search Essentials)
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const rawHost = (req.headers["x-forwarded-host"] as string) || req.headers.host || req.hostname || "";
+    const host = rawHost.toLowerCase().split(",")[0].trim().split(":")[0];
+    if (host === "pingava.com" && (req.method === "GET" || req.method === "HEAD")) {
+      if (!req.path.startsWith("/api") && !req.path.startsWith("/heartbeat")) {
+        return res.redirect(301, `https://www.pingava.com${req.url}`);
+      }
+    }
+    next();
+  });
+
+  // Redirect direct dashboard paths on www.pingava.com to dashboard.pingava.com
   app.use((req: Request, res: Response, next: NextFunction) => {
     const rawHost = (req.headers["x-forwarded-host"] as string) || req.headers.host || req.hostname || "";
     const host = rawHost.toLowerCase().split(",")[0].trim().split(":")[0];
     const isProdPublicHost = host === "www.pingava.com" || host === "pingava.com";
-    const dashboardPathRegex = /^\/(overview|monitors(\/\d+)?|radar|edge-inspector|edge|incidents|status-pages|status-page|alert-channels|settings|owner-admin|heartbeats|crons)\/?$/i;
+    const dashboardPathRegex = /^\/(overview|monitors(\/\d+)?|radar|edge-inspector|edge|incidents|alert-channels|settings|owner-admin|heartbeats|crons)\/?$/i;
 
     if (isProdPublicHost && (req.method === "GET" || req.method === "HEAD")) {
       if (dashboardPathRegex.test(req.path)) {

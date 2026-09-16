@@ -17,7 +17,7 @@ export const publicHref = (path = '/') => {
   return `${publicUrl}${cleanPath}`
 }
 
-export const dashboardPath = /^\/(overview|monitors(?:\/\d+)?|radar|edge-inspector|edge|crons|heartbeats|incidents|status-pages|status-page|alert-channels|settings|owner-admin|observability|meta-guardian)\/?$/
+export const dashboardPath = /^\/(overview|monitors(?:\/\d+)?|radar|edge-inspector|edge|crons|heartbeats|incidents|alert-channels|settings|owner-admin|observability|meta-guardian)\/?$/
 
 export function safeDashboardReturn(value: string | null): string | null {
   if (!value) return null

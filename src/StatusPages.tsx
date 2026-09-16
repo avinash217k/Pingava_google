@@ -81,7 +81,7 @@ export function PublicStatusPage({ slug }: { slug: string }) {
   if (!page) {
     return (
       <div className="loading-screen">
-        <PageMetadata title="Service status | Pingava" description="Loading this public Pingava service status page." noIndex />
+        <PageMetadata title="Service status | Pingava" description="Loading this public Pingava service status page." />
         <Activity size={28} />
         Loading service status...
       </div>

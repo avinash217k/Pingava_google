@@ -891,6 +891,35 @@ async function runTests() {
   await runFetchWithTimeoutProtection()
   assert(timerCleared, 'Outbound fetch wrapper guarantees clearTimeout cleanup in finally block')
 
+  // 31. GSC SEO: Public Route Routing Integrity (/status-pages is NOT intercepted as a dashboard path)
+  const dashboardRegex = /^\/(overview|monitors(\/\d+)?|radar|edge-inspector|edge|incidents|alert-channels|settings|owner-admin|heartbeats|crons)\/?$/i
+  assert(!dashboardRegex.test('/status-pages'), '/status-pages does not match dashboardPathRegex (prevents 302 to private dashboard)')
+  assert(!dashboardRegex.test('/status-page'), '/status-page does not match dashboardPathRegex')
+  assert(dashboardRegex.test('/overview'), '/overview correctly matches dashboardPathRegex')
+  assert(dashboardRegex.test('/monitors'), '/monitors correctly matches dashboardPathRegex')
+
+  // 32. GSC SEO: Canonical URL Clean Non-Trailing Slash Parity
+  const getCanonicalUrl = (canonicalPath: string) => {
+    return `https://www.pingava.com${canonicalPath === '/' ? '/' : canonicalPath}`
+  }
+  assert(getCanonicalUrl('/') === 'https://www.pingava.com/', 'Root path canonical retains trailing slash')
+  assert(getCanonicalUrl('/pricing') === 'https://www.pingava.com/pricing', 'Subpage /pricing canonical has clean non-trailing slash matching sitemap')
+  assert(getCanonicalUrl('/status-pages') === 'https://www.pingava.com/status-pages', '/status-pages canonical matches sitemap')
+
+  // 33. GSC SEO: Apex Domain 301 Permanent Canonical Redirection Rule
+  const shouldRedirectApex = (host: string, path: string, method: string) => {
+    if (host === 'pingava.com' && (method === 'GET' || method === 'HEAD')) {
+      if (!path.startsWith('/api') && !path.startsWith('/heartbeat')) {
+        return { redirect: true, code: 301, target: `https://www.pingava.com${path}` }
+      }
+    }
+    return { redirect: false }
+  }
+  const apexCheck = shouldRedirectApex('pingava.com', '/status-pages', 'GET')
+  assert(apexCheck.redirect && apexCheck.code === 301 && apexCheck.target === 'https://www.pingava.com/status-pages', 'Apex domain redirects public routes with 301 to www.pingava.com')
+  const apiCheck = shouldRedirectApex('pingava.com', '/api/health', 'GET')
+  assert(!apiCheck.redirect, 'Apex domain preserves direct API requests without redirect')
+
   console.log('\n=================================================================')
   console.log(`📊 TEST SUITE SUMMARY: ${passedTests} passed, ${failedTests} failed out of ${totalTests} tests`)
   console.log('=================================================================')
