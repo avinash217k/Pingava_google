@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useRef, useState, type ReactNode, type ErrorInfo } from 'react'
+import { Component, Suspense, lazy, useCallback, useEffect, useRef, useState, type ReactNode, type ErrorInfo } from 'react'
 import {
   Activity, ArrowLeft, Bell, Check, CheckCircle2, Clock3, ExternalLink, Globe2,
   Eye, EyeOff, Gauge, HeartPulse, LayoutDashboard, LogOut, Pencil, Pause, Play, Plus, Radio, Radar, RefreshCw,
@@ -14,25 +14,29 @@ import { IncidentManagement } from './IncidentManagement'
 import { StatusSubscribe, SubscriberAdmin, SubscriptionAction } from './StatusSubscriptions'
 import { EmailChangeConfirmation } from './EmailChangeConfirmation'
 import { OverviewDashboard } from './OverviewDashboard'
-import { AdminPanel } from './AdminPanel'
 import { BrandLockup, BrandMark } from './Brand'
 import { HomeStory } from './HomeStory'
 import { ReferenceProductPage, ReferenceChecker } from './ProductPages'
 import { PageMetadata } from './Seo'
-import { PublicPage, isPublicPagePath } from './PublicPages'
+import { isPublicPagePath } from './publicPageUtils'
 import { useTheme } from './ThemeContext'
 import { identifyUser, resetAnalytics, trackEvent, trackPageView } from './analyticsClient'
 import { dashboardHref, dashboardPath, dashboardUrl, isDashboardHost, isProdDomain, legacyDashboardPath, safeDashboardReturn } from './appConfig'
 import { MonitorRequestFields } from './MonitorRequestFields'
 import { monitorRequestPayload } from './monitorRequestPayload'
 import { HttpTransactionInspector } from './HttpTransactionInspector'
-import { MultiRegionEdgeInspector } from './MultiRegionEdgeInspector'
-import { LatencyAnomalyRadar } from './LatencyAnomalyRadar'
-import { CronHeartbeatManager } from './CronHeartbeatManager'
 import { AddMonitor } from './AddMonitor'
-import { PrivacyPage, TermsPage } from './LegalPages'
-import { PingavaObservability } from './PingavaObservability'
-import { DemoDashboard } from './DemoDashboard'
+
+// Core Web Vitals: Code-split heavy administrative, telemetry, and secondary page modules
+const AdminPanel = lazy(() => import('./AdminPanel').then((m) => ({ default: m.AdminPanel })))
+const PingavaObservability = lazy(() => import('./PingavaObservability').then((m) => ({ default: m.PingavaObservability })))
+const MultiRegionEdgeInspector = lazy(() => import('./MultiRegionEdgeInspector').then((m) => ({ default: m.MultiRegionEdgeInspector })))
+const LatencyAnomalyRadar = lazy(() => import('./LatencyAnomalyRadar').then((m) => ({ default: m.LatencyAnomalyRadar })))
+const CronHeartbeatManager = lazy(() => import('./CronHeartbeatManager').then((m) => ({ default: m.CronHeartbeatManager })))
+const DemoDashboard = lazy(() => import('./DemoDashboard').then((m) => ({ default: m.DemoDashboard })))
+const PublicPage = lazy(() => import('./PublicPages').then((m) => ({ default: m.PublicPage })))
+const TermsPage = lazy(() => import('./LegalPages').then((m) => ({ default: m.TermsPage })))
+const PrivacyPage = lazy(() => import('./LegalPages').then((m) => ({ default: m.PrivacyPage })))
 
 type View = 'overview' | 'monitors' | 'heartbeats' | 'radar' | 'edge' | 'incidents' | 'status' | 'alerts' | 'settings' | 'admin' | 'observability'
 const nav = [
@@ -1183,7 +1187,9 @@ function AppRouter() {
 function App() {
   return (
     <ErrorBoundary>
-      <AppRouter />
+      <Suspense fallback={<div className="loading-screen" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#070d18', color: '#94a3b8' }}><Activity size={28} /></div>}>
+        <AppRouter />
+      </Suspense>
     </ErrorBoundary>
   )
 }

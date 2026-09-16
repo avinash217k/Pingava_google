@@ -5854,7 +5854,25 @@ welcome@pingava.com`;
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath, { index: false }));
+
+    // Core Web Vitals: Serve content-hashed assets (/assets/*) with 1-year immutable caching
+    app.use("/assets", express.static(path.join(distPath, "assets"), {
+      maxAge: "365d",
+      immutable: true
+    }));
+
+    // Serve public root assets (favicons, logos, images) with 1-day caching + stale-while-revalidate
+    app.use(express.static(distPath, {
+      index: false,
+      maxAge: "1d",
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith(".html")) {
+          res.setHeader("Cache-Control", "no-cache");
+        } else {
+          res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+        }
+      }
+    }));
     app.get("/favicon.ico", (_req, res) => {
       const icoPath = path.join(distPath, "favicon.ico");
       if (fs.existsSync(icoPath)) {
@@ -5900,6 +5918,7 @@ welcome@pingava.com`;
         res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
       }
 
+      res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.send(html);
     });

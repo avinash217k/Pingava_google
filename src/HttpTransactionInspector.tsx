@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Suspense, lazy, useMemo, useState } from 'react'
 import {
   Check as CheckIcon,
   Clipboard,
@@ -15,10 +15,11 @@ import {
 } from 'lucide-react'
 import type { Check, Monitor } from './api'
 import { AiRootCauseDiagnostic } from './AiRootCauseDiagnostic'
-import { MultiRegionEdgeInspector } from './MultiRegionEdgeInspector'
 import { ApiContractGuardian } from './ApiContractGuardian'
-import { LatencyAnomalyRadar } from './LatencyAnomalyRadar'
 import { SslCertificateGuardian } from './SslCertificateGuardian'
+
+const MultiRegionEdgeInspector = lazy(() => import('./MultiRegionEdgeInspector').then((m) => ({ default: m.MultiRegionEdgeInspector })))
+const LatencyAnomalyRadar = lazy(() => import('./LatencyAnomalyRadar').then((m) => ({ default: m.LatencyAnomalyRadar })))
 
 export type Tab = 'request' | 'response' | 'ssl' | 'diagnostic' | 'edge' | 'contract' | 'radar'
 
@@ -121,35 +122,37 @@ export function HttpTransactionInspector({ monitor, check, tab, onTabChange, onR
       </button>
     </div>
     <div role="tabpanel">
-      {tab === 'request' ? (
-        <RequestDetails monitor={monitor} />
-      ) : tab === 'response' ? (
-        <ResponseDetails monitor={monitor} check={check} onRun={onRun} />
-      ) : tab === 'ssl' ? (
-        <div style={{ padding: '16px' }}>
-          <SslCertificateGuardian monitor={monitor} />
-        </div>
-      ) : tab === 'radar' ? (
-        <div style={{ padding: '16px' }}>
-          <LatencyAnomalyRadar mode="monitor" monitor={monitor} />
-        </div>
-      ) : tab === 'contract' ? (
-        <div style={{ padding: '16px' }}>
-          <ApiContractGuardian monitor={monitor} />
-        </div>
-      ) : tab === 'edge' ? (
-        <div style={{ padding: '16px' }}>
-          <MultiRegionEdgeInspector monitor={monitor} embedded={true} />
-        </div>
-      ) : (
-        <div style={{ padding: '16px' }}>
-          <AiRootCauseDiagnostic
-            monitorId={monitor.id}
-            checkId={check?.id}
-            compact={false}
-          />
-        </div>
-      )}
+      <Suspense fallback={<div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>Loading diagnostic view...</div>}>
+        {tab === 'request' ? (
+          <RequestDetails monitor={monitor} />
+        ) : tab === 'response' ? (
+          <ResponseDetails monitor={monitor} check={check} onRun={onRun} />
+        ) : tab === 'ssl' ? (
+          <div style={{ padding: '16px' }}>
+            <SslCertificateGuardian monitor={monitor} />
+          </div>
+        ) : tab === 'radar' ? (
+          <div style={{ padding: '16px' }}>
+            <LatencyAnomalyRadar mode="monitor" monitor={monitor} />
+          </div>
+        ) : tab === 'contract' ? (
+          <div style={{ padding: '16px' }}>
+            <ApiContractGuardian monitor={monitor} />
+          </div>
+        ) : tab === 'edge' ? (
+          <div style={{ padding: '16px' }}>
+            <MultiRegionEdgeInspector monitor={monitor} embedded={true} />
+          </div>
+        ) : (
+          <div style={{ padding: '16px' }}>
+            <AiRootCauseDiagnostic
+              monitorId={monitor.id}
+              checkId={check?.id}
+              compact={false}
+            />
+          </div>
+        )}
+      </Suspense>
     </div>
   </section>
 }

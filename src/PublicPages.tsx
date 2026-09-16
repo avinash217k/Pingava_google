@@ -20,11 +20,7 @@ import { PublicFooter, PublicHeader } from "./MarketingPages"
 import { PageMetadata } from "./Seo"
 import "./PublicPages.css"
 
-export type PublicPagePath = keyof typeof metadata
-// oxlint-disable-next-line react/only-export-components
-export function isPublicPagePath(path: string): path is PublicPagePath {
-  return Object.hasOwn(metadata, path)
-}
+export { isPublicPagePath, type PublicPagePath } from "./publicPageUtils"
 
 function Actions({
   primary = "Start monitoring",

@@ -16,18 +16,18 @@ export function BrandMark({
   if (variant === 'mono') {
     return (
       <span className={`brand-mark brand-mark-mono ${className}`.trim()} aria-hidden="true">
-        <img src={markMonoDark} alt="" />
+        <img src={markMonoDark} alt="" width="38" height="38" />
       </span>
     )
   }
   if (variant === 'mono-white') {
     return (
       <span className={`brand-mark brand-mark-mono brand-mark-mono-white ${className}`.trim()} aria-hidden="true">
-        <img src={markMono} alt="" />
+        <img src={markMono} alt="" width="38" height="38" />
       </span>
     )
   }
-  return <span className={`brand-mark ${className}`.trim()} aria-hidden="true"><img src={mark} alt="" /></span>
+  return <span className={`brand-mark ${className}`.trim()} aria-hidden="true"><img src={mark} alt="" width="38" height="38" /></span>
 }
 
 export function BrandLogo({
