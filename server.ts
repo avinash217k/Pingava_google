@@ -5901,11 +5901,13 @@ welcome@pingava.com`;
         }
       }
     }));
-    app.get("/favicon.ico", (_req, res) => {
-      const icoPath = path.join(distPath, "favicon.ico");
-      if (fs.existsSync(icoPath)) {
-        res.setHeader("Content-Type", "image/x-icon");
-        res.sendFile(icoPath);
+    app.get(["/favicon.ico", "/favicon.svg"], (req, res) => {
+      const fileName = req.path.endsWith(".svg") ? "favicon.svg" : "favicon.ico";
+      const filePath = path.join(distPath, fileName);
+      if (fs.existsSync(filePath)) {
+        res.setHeader("Content-Type", fileName.endsWith(".svg") ? "image/svg+xml" : "image/x-icon");
+        res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+        res.sendFile(filePath);
       } else {
         res.status(404).end();
       }
