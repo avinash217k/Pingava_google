@@ -41,6 +41,7 @@ import dns from "node:dns";
 import http from "node:http";
 import https from "node:https";
 import { isPublicPagePath, injectPublicPageIntoHtml } from "./serverPublicPages";
+import { assistantRateLimiter, processAssistantQuery } from "./serverAssistant";
 import {
   type Heartbeat,
   type HeartbeatPing,
@@ -5411,6 +5412,33 @@ welcome@pingava.com`;
     } catch (err: any) {
       console.error("[Contact Form] Failed to process inquiry:", err);
       res.status(500).json({ detail: "Unable to send inquiry. Please email connect@pingava.com directly." });
+    }
+  });
+
+  // Public interactive product assistant endpoint (for pingava.com visitors)
+  app.post("/api/public/assistant", assistantRateLimiter, async (req, res) => {
+    try {
+      // Honeypot spam trap
+      if (req.body?.website || req.body?._hp_check) {
+        return res.json({ success: true, reply: "Thank you for reaching out to Pingava!" });
+      }
+
+      const message = String(req.body?.message || "").trim();
+      if (!message) {
+        return res.status(400).json({ success: false, error: "Question message is required." });
+      }
+      if (message.length > 2000) {
+        return res.status(400).json({ success: false, error: "Question exceeds maximum length of 2,000 characters." });
+      }
+
+      const reply = await processAssistantQuery(message, req.body?.history);
+      res.json({ success: true, reply });
+    } catch (err: any) {
+      console.error("[Assistant API Error]:", err);
+      res.status(500).json({
+        success: false,
+        error: "Unable to process assistant query at this time. Please try again shortly."
+      });
     }
   });
 

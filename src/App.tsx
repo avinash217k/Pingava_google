@@ -37,6 +37,7 @@ const DemoDashboard = lazy(() => import('./DemoDashboard').then((m) => ({ defaul
 const PublicPage = lazy(() => import('./PublicPages').then((m) => ({ default: m.PublicPage })))
 const TermsPage = lazy(() => import('./LegalPages').then((m) => ({ default: m.TermsPage })))
 const PrivacyPage = lazy(() => import('./LegalPages').then((m) => ({ default: m.PrivacyPage })))
+const PingavaAssistantWidget = lazy(() => import('./PingavaAssistantWidget').then((m) => ({ default: m.PingavaAssistantWidget })))
 
 type View = 'overview' | 'monitors' | 'heartbeats' | 'radar' | 'edge' | 'incidents' | 'status' | 'alerts' | 'settings' | 'admin' | 'observability'
 const nav = [
@@ -1185,10 +1186,29 @@ function AppRouter() {
 }
 
 function App() {
+  const path = window.location.pathname.replace(/\/$/, '') || '/'
+  const isPublicPage =
+    !isDashboardHost &&
+    !path.startsWith('/app') &&
+    !path.startsWith('/status/') &&
+    path !== '/register' &&
+    path !== '/login' &&
+    path !== '/reset-password' &&
+    path !== '/verify-email' &&
+    path !== '/email-change/confirm' &&
+    path !== '/subscription/confirm' &&
+    path !== '/unsubscribe' &&
+    !dashboardPath.test(path)
+
   return (
     <ErrorBoundary>
       <Suspense fallback={<div className="loading-screen" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#070d18', color: '#94a3b8' }}><Activity size={28} /></div>}>
         <AppRouter />
+        {isPublicPage && (
+          <Suspense fallback={null}>
+            <PingavaAssistantWidget />
+          </Suspense>
+        )}
       </Suspense>
     </ErrorBoundary>
   )

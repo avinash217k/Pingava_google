@@ -1,0 +1,527 @@
+/* Pingava Floating Product Assistant Widget Styles */
+
+.pingava-assistant-wrapper {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 99999;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+}
+
+/* Gradual fade-in animation for initial mount */
+.pingava-assistant-gradual-enter {
+  animation: pingavaAssistantFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes pingavaAssistantFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.85);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Floating Action Button (Launcher) */
+.pingava-assistant-fab {
+  position: relative;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  border: 2px solid rgba(56, 189, 248, 0.7);
+  background: linear-gradient(135deg, #0b1528 0%, #172554 100%);
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 30px -4px rgba(2, 132, 199, 0.5), 0 0 15px rgba(56, 189, 248, 0.35);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease, border-color 0.2s ease;
+  outline: none;
+  padding: 0;
+}
+
+.pingava-assistant-fab:hover {
+  transform: scale(1.08) translateY(-2px);
+  box-shadow: 0 14px 38px -4px rgba(2, 132, 199, 0.65), 0 0 22px rgba(56, 189, 248, 0.5);
+  border-color: #38bdf8;
+}
+
+.pingava-assistant-fab:active {
+  transform: scale(0.96);
+}
+
+/* High-contrast logo container to ensure logo pops brightly anywhere */
+.pingava-fab-logo-disc {
+  width: 44px;
+  height: 44px;
+  background: #ffffff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.pingava-fab-logo-disc img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  display: block;
+}
+
+/* Close icon when expanded */
+.pingava-fab-close-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+}
+
+/* Online status pulsing indicator badge */
+.pingava-fab-status-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  background-color: #22c55e;
+  border: 2.5px solid #0b1528;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #22c55e;
+}
+
+.pingava-fab-status-badge::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border-radius: 50%;
+  border: 1.5px solid #22c55e;
+  animation: pingavaStatusPulse 2s infinite ease-in-out;
+  opacity: 0.7;
+}
+
+@keyframes pingavaStatusPulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  70% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+/* Floating Tooltip */
+.pingava-assistant-tooltip {
+  position: absolute;
+  right: 74px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.pingava-assistant-fab:hover + .pingava-assistant-tooltip {
+  opacity: 1;
+  transform: translateY(-50%) translateX(-4px);
+}
+
+/* Expandable Chat Modal Window */
+.pingava-chat-window {
+  position: fixed;
+  bottom: 96px;
+  right: 24px;
+  width: 390px;
+  max-width: calc(100vw - 32px);
+  height: 580px;
+  max-height: calc(100vh - 120px);
+  background: #0f172a;
+  border-radius: 20px;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  box-shadow: 0 24px 60px -8px rgba(0, 0, 0, 0.75), 0 0 35px rgba(2, 132, 199, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 99999;
+  animation: pingavaChatPop 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes pingavaChatPop {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Modal Header */
+.pingava-chat-header {
+  background: linear-gradient(135deg, #0284c7 0%, #1e40af 100%);
+  padding: 16px 18px;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+}
+
+.pingava-chat-header-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pingava-chat-avatar {
+  width: 40px;
+  height: 40px;
+  background: #ffffff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+}
+
+.pingava-chat-avatar img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.pingava-chat-titles {
+  display: flex;
+  flex-direction: column;
+}
+
+.pingava-chat-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+  line-height: 1.2;
+}
+
+.pingava-chat-subtitle {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+.pingava-online-dot {
+  width: 8px;
+  height: 8px;
+  background: #4ade80;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 6px #4ade80;
+}
+
+.pingava-chat-close-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: #ffffff;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.pingava-chat-close-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.08);
+}
+
+/* Guardrail Notice Banner */
+.pingava-chat-banner {
+  background: rgba(15, 23, 42, 0.85);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.15);
+  padding: 8px 14px;
+  font-size: 11.5px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pingava-chat-banner-icon {
+  color: #38bdf8;
+  flex-shrink: 0;
+}
+
+/* Chat Messages Feed */
+.pingava-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  scroll-behavior: smooth;
+}
+
+.pingava-chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.pingava-chat-messages::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+}
+
+/* Message Bubble */
+.pingava-msg-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.pingava-msg-user {
+  justify-content: flex-end;
+}
+
+.pingava-msg-assistant {
+  justify-content: flex-start;
+}
+
+.pingava-msg-bubble {
+  max-width: 84%;
+  padding: 11px 15px;
+  border-radius: 16px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.pingava-msg-user .pingava-msg-bubble {
+  background: #0284c7;
+  color: #ffffff;
+  border-bottom-right-radius: 4px;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
+}
+
+.pingava-msg-assistant .pingava-msg-bubble {
+  background: #1e293b;
+  color: #e2e8f0;
+  border-bottom-left-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pingava-msg-bubble p {
+  margin: 0 0 8px 0;
+}
+
+.pingava-msg-bubble p:last-child {
+  margin-bottom: 0;
+}
+
+.pingava-msg-bubble ul, .pingava-msg-bubble ol {
+  margin: 6px 0;
+  padding-left: 18px;
+}
+
+.pingava-msg-bubble li {
+  margin-bottom: 4px;
+}
+
+.pingava-msg-bubble strong {
+  color: #38bdf8;
+}
+
+.pingava-msg-bubble a {
+  color: #38bdf8;
+  text-decoration: underline;
+}
+
+/* Typing indicator dots */
+.pingava-typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 12px 16px;
+}
+
+.pingava-typing-dot {
+  width: 7px;
+  height: 7px;
+  background-color: #38bdf8;
+  border-radius: 50%;
+  animation: pingavaBounce 1.4s infinite ease-in-out both;
+}
+
+.pingava-typing-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.pingava-typing-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes pingavaBounce {
+  0%, 80%, 100% {
+    transform: scale(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Quick Suggestion Pills */
+.pingava-quick-suggestions {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pingava-quick-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.pingava-pill-btn {
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  color: #cbd5e1;
+  font-size: 12.5px;
+  padding: 7px 12px;
+  border-radius: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pingava-pill-btn:hover {
+  background: rgba(2, 132, 199, 0.15);
+  border-color: #38bdf8;
+  color: #ffffff;
+}
+
+/* Chat Input Bar */
+.pingava-chat-input-area {
+  padding: 12px 14px;
+  background: #0b1329;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pingava-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #1e293b;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 14px;
+  padding: 4px 6px 4px 12px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pingava-input-row:focus-within {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+.pingava-input-field {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #f8fafc;
+  font-size: 13.5px;
+  padding: 8px 0;
+}
+
+.pingava-input-field::placeholder {
+  color: #64748b;
+}
+
+.pingava-send-btn {
+  width: 36px;
+  height: 36px;
+  background: #0284c7;
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+  flex-shrink: 0;
+}
+
+.pingava-send-btn:hover:not(:disabled) {
+  background: #0369a1;
+  transform: scale(1.04);
+}
+
+.pingava-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pingava-input-disclaimer {
+  font-size: 10.5px;
+  color: #64748b;
+  text-align: center;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 480px) {
+  .pingava-assistant-wrapper {
+    bottom: 16px;
+    right: 16px;
+  }
+  .pingava-chat-window {
+    right: 12px;
+    bottom: 84px;
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 100px);
+  }
+  .pingava-assistant-tooltip {
+    display: none;
+  }
+}
