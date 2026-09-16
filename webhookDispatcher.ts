@@ -4,6 +4,7 @@
  */
 
 import { observability } from './observabilityService';
+import { safeFetch } from './securityService';
 
 export type WebhookEventKind = 'down' | 'recovery' | 'ssl_expiring' | 'test';
 
@@ -37,13 +38,16 @@ export interface WebhookDispatchResult {
 /**
  * Detects the destination webhook service from the URL format.
  */
-export function detectWebhookService(url: string): 'slack' | 'discord' | 'generic' {
+export function detectWebhookService(url: string): 'slack' | 'discord' | 'telegram' | 'generic' {
   const normalized = String(url || '').toLowerCase();
   if (normalized.includes('hooks.slack.com/services/')) {
     return 'slack';
   }
   if (normalized.includes('discord.com/api/webhooks/') || normalized.includes('discordapp.com/api/webhooks/')) {
     return 'discord';
+  }
+  if (normalized.includes('api.telegram.org')) {
+    return 'telegram';
   }
   return 'generic';
 }
@@ -185,7 +189,7 @@ function buildDiscordPayload(payload: WebhookDispatchPayload) {
           }
         ],
         footer: {
-          text: 'Pingava Synthetic Monitoring • Zero False Alarms'
+          text: 'Pingava Synthetic Monitoring • Reduced False Alarms'
         },
         timestamp: new Date().toISOString()
       }
@@ -212,6 +216,71 @@ function buildGenericPayload(payload: WebhookDispatchPayload) {
 }
 
 /**
+ * Formats a Telegram Bot API sendMessage payload using clean HTML formatting.
+ */
+export function buildTelegramPayload(payload: WebhookDispatchPayload, targetUrl: string) {
+  let chatId: string | null = null;
+  try {
+    const urlObj = new URL(targetUrl);
+    chatId = urlObj.searchParams.get('chat_id') || urlObj.searchParams.get('chatId');
+  } catch {
+    chatId = null;
+  }
+
+  const isDown = payload.kind === 'down';
+  const isRecovery = payload.kind === 'recovery';
+  const isSsl = payload.kind === 'ssl_expiring';
+
+  const emoji = isDown ? '🚨' : isRecovery ? '✅' : isSsl ? '⚠️' : '🔔';
+  const title = isDown
+    ? `Downtime Incident: ${payload.monitor.name} is DOWN`
+    : isRecovery
+    ? `Service Recovered: ${payload.monitor.name} is back UP`
+    : isSsl
+    ? `SSL Certificate Warning: ${payload.monitor.name}`
+    : `Test Notification: ${payload.monitor.name}`;
+
+  const statusText = isDown
+    ? `❌ DOWN (${payload.incident?.error || 'Unresponsive'})`
+    : isRecovery
+    ? `✅ Operational`
+    : isSsl
+    ? `⚠️ ${payload.incident?.error || 'Certificate expiring soon'}`
+    : `🟢 Test Active`;
+
+  const dashboardUrl = payload.dashboard_url || 'https://dashboard.pingava.com/monitors';
+
+  const escapeHtml = (str: string) =>
+    String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+  const lines = [
+    `${emoji} <b>[Pingava] ${escapeHtml(title)}</b>`,
+    ``,
+    `• <b>Monitor:</b> <a href="${escapeHtml(payload.monitor.url)}">${escapeHtml(payload.monitor.name)}</a>`,
+    `• <b>Status:</b> ${escapeHtml(statusText)}`,
+    payload.incident?.response_time_ms ? `• <b>Latency:</b> ${payload.incident.response_time_ms} ms` : null,
+    `• <b>Timestamp:</b> ${escapeHtml(new Date().toUTCString())}`,
+    ``,
+    `🔗 <a href="${escapeHtml(dashboardUrl)}">Open Pingava Dashboard</a>`
+  ].filter(line => line !== null);
+
+  const body: Record<string, any> = {
+    text: lines.join('\n'),
+    parse_mode: 'HTML',
+    disable_web_page_preview: true
+  };
+
+  if (chatId) {
+    body.chat_id = chatId;
+  }
+
+  return body;
+}
+
+/**
  * Dispatches an alert to an external webhook URL with proper formatting, timeout, and response tracking.
  */
 export async function dispatchWebhook(
@@ -231,12 +300,28 @@ export async function dispatchWebhook(
   }
 
   const service = detectWebhookService(targetUrl);
+  let effectiveUrl = targetUrl;
   let requestBody: any;
 
   if (service === 'slack') {
     requestBody = buildSlackPayload(payload);
   } else if (service === 'discord') {
     requestBody = buildDiscordPayload(payload);
+  } else if (service === 'telegram') {
+    while (effectiveUrl.includes('api.telegram.org/bothttps://api.telegram.org/bot')) {
+      effectiveUrl = effectiveUrl.replace('api.telegram.org/bothttps://api.telegram.org/bot', 'api.telegram.org/bot');
+    }
+    while (effectiveUrl.includes('api.telegram.org/bothttp://api.telegram.org/bot')) {
+      effectiveUrl = effectiveUrl.replace('api.telegram.org/bothttp://api.telegram.org/bot', 'api.telegram.org/bot');
+    }
+    try {
+      const u = new URL(effectiveUrl);
+      if (!u.pathname.endsWith('/sendMessage')) {
+        u.pathname = u.pathname.replace(/\/?$/, '/sendMessage');
+        effectiveUrl = u.toString();
+      }
+    } catch {}
+    requestBody = buildTelegramPayload(payload, effectiveUrl);
   } else {
     requestBody = buildGenericPayload(payload);
   }
@@ -245,7 +330,7 @@ export async function dispatchWebhook(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(targetUrl, {
+    const response = await safeFetch(effectiveUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -260,14 +345,24 @@ export async function dispatchWebhook(
     clearTimeout(timer);
 
     let responseSnippet: string | null = null;
+    let serviceSuccess = response.status >= 200 && response.status < 300;
     try {
       const text = await response.text();
       responseSnippet = text.slice(0, 250);
+      if (service === 'telegram') {
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed && parsed.ok === false) {
+            serviceSuccess = false;
+            responseSnippet = parsed.description || responseSnippet;
+          }
+        } catch {}
+      }
     } catch {
       // Body reading error is non-critical
     }
 
-    const isSuccess = response.status >= 200 && response.status < 300;
+    const isSuccess = serviceSuccess;
     const errorDetail = isSuccess ? null : `HTTP ${response.status}: ${responseSnippet || response.statusText || 'Delivery rejected'}`;
     observability.recordWebhookAttempt(isSuccess, errorDetail || undefined);
 

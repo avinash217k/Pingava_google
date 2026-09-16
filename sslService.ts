@@ -1,5 +1,6 @@
 import tls from 'node:tls';
 import { URL } from 'node:url';
+import { validateSafeOutboundTarget } from './securityService';
 
 export interface SslCheckResult {
   valid: boolean;
@@ -18,14 +19,14 @@ export interface SslCheckResult {
  * Connects to a target HTTPS domain using SNI-enabled TLS socket
  * and inspects the remote peer certificate.
  */
-export function checkSslCertificate(targetUrl: string, timeoutMs: number = 8000): Promise<SslCheckResult> {
+export async function checkSslCertificate(targetUrl: string, timeoutMs: number = 8000): Promise<SslCheckResult> {
   const checkedAt = new Date().toISOString();
   let parsed: URL;
 
   try {
     parsed = new URL(targetUrl);
   } catch {
-    return Promise.resolve({
+    return {
       valid: false,
       status: 'error',
       expires_at: null,
@@ -35,11 +36,11 @@ export function checkSslCertificate(targetUrl: string, timeoutMs: number = 8000)
       protocol: null,
       error: 'Invalid target URL',
       checked_at: checkedAt
-    });
+    };
   }
 
   if (parsed.protocol !== 'https:') {
-    return Promise.resolve({
+    return {
       valid: true,
       status: 'not_applicable',
       expires_at: null,
@@ -49,11 +50,42 @@ export function checkSslCertificate(targetUrl: string, timeoutMs: number = 8000)
       protocol: null,
       error: null,
       checked_at: checkedAt
-    });
+    };
+  }
+
+  try {
+    await validateSafeOutboundTarget(targetUrl);
+  } catch (valErr: any) {
+    return {
+      valid: false,
+      status: 'error',
+      expires_at: null,
+      days_remaining: null,
+      issuer: null,
+      subject: null,
+      protocol: null,
+      error: valErr?.message || 'Testing private, loopback, or cloud metadata IP addresses is not allowed.',
+      checked_at: checkedAt
+    };
   }
 
   const hostname = parsed.hostname;
   const port = Number(parsed.port) || 443;
+
+  const ALLOWED_SSL_PORTS = new Set([443, 8443, 4433, 8080, 8000, 3000, 5000, 9443, 80]);
+  if (!ALLOWED_SSL_PORTS.has(port)) {
+    return {
+      valid: false,
+      status: 'error',
+      expires_at: null,
+      days_remaining: null,
+      issuer: null,
+      subject: null,
+      protocol: null,
+      error: `Port ${port} is restricted. Only standard web ports (443, 8443, etc.) are allowed for SSL inspection.`,
+      checked_at: checkedAt
+    };
+  }
 
   return new Promise((resolve) => {
     let resolved = false;
