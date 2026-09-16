@@ -17,6 +17,7 @@
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
+  --pingava-signature-opacity: 0.075;
 
   background-color: var(--bg-main);
   color: var(--text-primary);
@@ -197,6 +198,20 @@
   margin: 0 auto;
   padding: 4.5rem 1.5rem 2.5rem;
   text-align: center;
+}
+
+.modern-hero-watermark {
+  position: absolute;
+  top: clamp(50px, 7vw, 105px);
+  right: clamp(20px, 3.2vw, 75px);
+  width: min(490px, 35vw);
+  aspect-ratio: 1;
+  background: url('./assets/pingava-mark.png') center / contain no-repeat;
+  opacity: var(--pingava-signature-opacity, 0.085);
+  pointer-events: none;
+  z-index: 0;
+  user-select: none;
+  filter: drop-shadow(0 0 24px rgba(56, 189, 248, 0.12));
 }
 
 .modern-hero-badge {
@@ -2779,6 +2794,8 @@
 
 /* CTA SECTION */
 .modern-cta-section {
+  position: relative;
+  overflow: hidden;
   max-width: 900px;
   margin: 0 auto 6rem;
   padding: 4rem 2rem;
@@ -2787,6 +2804,25 @@
   border: 1px solid rgba(16, 185, 129, 0.3);
   border-radius: 16px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modern-cta-section::after {
+  content: '';
+  position: absolute;
+  width: min(520px, 75%);
+  aspect-ratio: 1;
+  right: -10%;
+  bottom: -18%;
+  background: url('./assets/pingava-mark.png') center / contain no-repeat;
+  opacity: var(--pingava-signature-opacity, 0.075);
+  pointer-events: none;
+  z-index: 0;
+  filter: drop-shadow(0 0 20px rgba(16, 185, 129, 0.12));
+}
+
+.modern-cta-section > * {
+  position: relative;
+  z-index: 1;
 }
 
 .modern-cta-section h2 {
@@ -2857,5 +2893,16 @@
   }
   .modern-result-stats {
     grid-template-columns: repeat(2, 1fr);
+  }
+  .modern-hero-watermark {
+    width: min(280px, 68vw);
+    right: 12px;
+    top: 60px;
+    opacity: 0.055;
+  }
+  .modern-cta-section::after {
+    width: min(360px, 85%);
+    right: -15%;
+    bottom: -15%;
   }
 }

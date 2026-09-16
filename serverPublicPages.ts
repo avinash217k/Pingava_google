@@ -141,7 +141,8 @@ export function renderPublicPageContent(p: string): string {
 
   if (normalized === "/" || normalized === "/home" || normalized === "/marketing") {
     return `
-    <div class="modern-landing" style="background-color:#070d18;color:#f8fafc;min-height:100vh;overflow-x:hidden;">
+    <div class="modern-landing" style="background-color:#070d18;color:#f8fafc;min-height:100vh;overflow-x:hidden;position:relative;">
+    <div class="modern-hero-watermark" aria-hidden="true"></div>
     <header class="modern-nav" style="display:flex;align-items:center;justify-content:space-between;padding:1.25rem 2rem;border-bottom:1px solid rgba(255,255,255,0.08);">
       <a href="/" class="modern-nav-brand" style="display:flex;align-items:center;gap:0.75rem;text-decoration:none;color:#fff;font-weight:700;font-size:1.2rem;">
         <span style="display:inline-block;width:24px;height:24px;background:#38bdf8;border-radius:6px;"></span>
@@ -161,8 +162,8 @@ export function renderPublicPageContent(p: string): string {
     </header>
 
     <main>
-      <section class="modern-hero-section" style="text-align:center;padding:4rem 1.5rem 2rem;max-width:1100px;margin:0 auto;">
-        <div style="display:inline-flex;align-items:center;gap:0.5rem;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);padding:0.4rem 1rem;border-radius:999px;color:#38bdf8;font-size:0.85rem;margin-bottom:1.5rem;">
+      <section class="modern-hero-section" style="text-align:center;padding:4rem 1.5rem 2rem;max-width:1100px;margin:0 auto;position:relative;">
+        <div style="display:inline-flex;align-items:center;gap:0.5rem;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);padding:0.4rem 1rem;border-radius:999px;color:#38bdf8;font-size:0.85rem;margin-bottom:1.5rem;position:relative;z-index:1;">
           <span style="width:8px;height:8px;background:#34d399;border-radius:50%;display:inline-block;"></span>
           THE COMPLETE SRE &amp; RELIABILITY SUITE: AI Root Cause Diagnostics + Latency Jitter Radar
         </div>

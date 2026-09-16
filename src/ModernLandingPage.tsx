@@ -50,6 +50,7 @@ export function ModernLandingPage() {
       <div className="modern-landing-glow-1" />
       <div className="modern-landing-glow-2" />
       <div className="modern-landing-glow-3" />
+      <div className="modern-hero-watermark" aria-hidden="true" />
 
       {/* Modern Sticky Navigation */}
       <header className="modern-nav">

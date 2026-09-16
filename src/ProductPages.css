@@ -18,7 +18,9 @@
 .reference-page .primary-btn { background: #69f4b3; color: #03291e; border: 1px solid #69f4b3; min-height: 46px; text-decoration: none; box-shadow: none; white-space: normal; }
 .reference-page .primary-btn:hover { background: #a0ffd2; }
 .reference-page .secondary-btn { color: #f5f7fb; border: 1px solid #7c91ab; background: transparent; min-height: 46px; text-decoration: none; }
-.reference-hero { max-width: 1180px; margin: auto; padding: 56px 0 68px; display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; min-height: 570px; }
+.reference-hero { position: relative; max-width: 1180px; margin: auto; padding: 56px 0 68px; display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; min-height: 570px; }
+.reference-hero::after { content: ''; position: absolute; width: min(580px, 75vw); aspect-ratio: 1; right: -5%; top: 50%; transform: translateY(-50%); background: url('./assets/pingava-mark.png') center / contain no-repeat; opacity: .065; pointer-events: none; z-index: 0; }
+.reference-hero > * { position: relative; z-index: 1; }
 .reference-copy { min-width: 0; }
 .reference-label { display: inline-flex; gap: 8px; align-items: center; border: 1px solid var(--accent); border-radius: 24px; padding: 7px 12px; color: var(--accent); font-size: 11px; text-transform: uppercase; margin: 0 0 24px; }
 .reference-copy h1 { font: 750 49px/1.12 'Manrope', sans-serif; margin: 0 0 24px; color: #f6f8fc; }
