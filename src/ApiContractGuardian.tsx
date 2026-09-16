@@ -10,8 +10,10 @@ import {
   Layers,
   Plus,
   RefreshCw,
+  Shield,
   ShieldAlert,
   ShieldCheck,
+  ToggleLeft,
   ToggleRight,
   Trash2,
   Wand2,
@@ -40,6 +42,7 @@ export function ApiContractGuardian({ monitor, onContractUpdated }: ApiContractG
   const [loading, setLoading] = useState(false)
   const [validating, setValidating] = useState(false)
   const [inferring, setInferring] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'fields' | 'breaking' | 'schema'>('fields')
@@ -623,8 +626,8 @@ export function ApiContractGuardian({ monitor, onContractUpdated }: ApiContractG
                 <button type="button" className="secondary-btn" onClick={() => setShowAddModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="primary-btn">
-                  Add to Contract
+                <button type="submit" className="primary-btn" disabled={saving}>
+                  {saving ? 'Saving...' : 'Add to Contract'}
                 </button>
               </div>
             </form>

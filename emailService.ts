@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
 import { observability } from './observabilityService';
 
 export interface SendAlertOptions {
@@ -11,9 +12,9 @@ export interface SendAlertOptions {
   fromEmail?: string;
 }
 
-let cachedTransporter: nodemailer.Transporter | null = null;
+let cachedTransporter: Transporter | null = null;
 
-function getTransporter(): nodemailer.Transporter | null {
+function getTransporter(): Transporter | null {
   const host = process.env.SMTP_HOST || 'smtp-relay.brevo.com';
   const port = Number(process.env.SMTP_PORT || 587);
   const user = process.env.SMTP_USER;

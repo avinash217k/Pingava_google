@@ -37,6 +37,10 @@ import {
 import { sendEmailAlert } from "./emailService";
 import { dispatchWebhook, detectWebhookService } from "./webhookDispatcher";
 import { checkSslCertificate } from "./sslService";
+import dns from "node:dns";
+import http from "node:http";
+import https from "node:https";
+import { isPublicPagePath, injectPublicPageIntoHtml } from "./serverPublicPages";
 import {
   type Heartbeat,
   type HeartbeatPing,
@@ -74,24 +78,15 @@ interface User {
   last_login_at?: string;
 }
 
-function hashPassword(password: string): string {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
-  return `pbkdf2:${salt}:${hash}`;
-}
-
-function verifyPassword(password: string, storedHash?: string): boolean {
-  if (!storedHash || !password) return false;
-  if (storedHash.startsWith("pbkdf2:")) {
-    const parts = storedHash.split(":");
-    if (parts.length !== 3) return false;
-    const [, salt, originalHash] = parts;
-    const testHash = crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
-    return crypto.timingSafeEqual(Buffer.from(testHash, "hex"), Buffer.from(originalHash, "hex"));
-  }
-  // Plaintext match fallback for initial seed passwords (e.g. "password123")
-  return storedHash === password;
-}
+import {
+  hashPassword,
+  verifyPassword,
+  validateSafeOutboundTarget,
+  safeFetch,
+  verifyGoogleIdToken,
+  PBKDF2_ITERATIONS,
+  type SafeTargetResult
+} from "./securityService";
 
 export interface PlanCatalogItem {
   id: PlanTier;
@@ -236,7 +231,7 @@ interface WebhookChannel {
   name: string;
   masked_url: string;
   raw_url?: string;
-  channel_type?: 'slack' | 'discord' | 'generic';
+  channel_type?: 'slack' | 'discord' | 'telegram' | 'generic';
   alert_on_down: boolean;
   alert_on_recovery: boolean;
   alert_on_ssl_expiry: boolean;
@@ -561,6 +556,15 @@ function parseGoogleCredential(credential?: string): { email?: string; name?: st
     return {};
   }
 }
+
+interface PendingEmailChange {
+  userId: number;
+  currentEmail: string;
+  newEmail: string;
+  token: string;
+  expiresAt: number;
+}
+let pendingEmailChanges: PendingEmailChange[] = [];
 
 let users: User[] = [
   {
@@ -1142,6 +1146,17 @@ function ensureIncidentsIntegrity() {
 
       const outageTime = monitor.last_checked_at || now;
 
+      // Check if an incident for this monitor was manually resolved or dismissed recently
+      const recentResolved = unifiedIncidents.find(
+        i => i.monitor_ids.map(Number).includes(monIdNum) && (i.status === "resolved" || i.status === "dismissed") && (
+          !i.resolved_at || new Date(i.resolved_at).getTime() >= new Date(outageTime).getTime() - 120000
+        )
+      );
+      if (recentResolved && !openUnified) {
+        // Incident was already addressed by an engineer; prevent duplicate resurrection
+        continue;
+      }
+
       let recordId = openUnified ? openUnified.record_id : 0;
       if (!openUnified) {
         const nextRecordId = (unifiedIncidents.reduce((max, i) => Math.max(max, i.record_id || 0), 0) || 0) + 1;
@@ -1326,7 +1341,7 @@ async function startServer() {
   // Meta-Guardian Watchdog Alert Dispatcher (Brevo SMTP Owner Alert + Webhooks)
   observability.setAlertDispatcher(async (alert) => {
     const ownerEmail = process.env.OWNER_EMAIL || "avinash217k@gmail.com";
-    logger.warn({ alert }, `[Meta-Guardian] Dispatched watchdog alert to owner: ${alert.title}`);
+    logger.warn(`[Meta-Guardian] Dispatched watchdog alert to owner: ${alert.title}`, { alert });
 
     // 1. Send via Brevo SMTP
     await sendEmailAlert({
@@ -1348,21 +1363,24 @@ async function startServer() {
     // 2. Transmit to active webhooks if configured
     const activeWebhooks = webhooks.filter(w => w.active);
     for (const wh of activeWebhooks) {
-      void dispatchWebhook(wh.raw_url, {
-        kind: 'down',
-        monitor: {
-          id: 0,
-          name: 'Pingava Core Monitoring Engine',
-          url: 'https://dashboard.pingava.com',
-          status: 'critical'
-        },
-        incident: {
-          id: Date.now(),
-          error: alert.message,
-          timestamp: new Date().toISOString()
-        },
-        dashboard_url: 'https://dashboard.pingava.com/observability'
-      }).catch(() => {});
+      const targetUrl = wh.raw_url || wh.masked_url;
+      if (targetUrl && !targetUrl.includes("••••••••")) {
+        void dispatchWebhook(targetUrl, {
+          kind: 'down',
+          monitor: {
+            id: 0,
+            name: 'Pingava Core Monitoring Engine',
+            url: 'https://dashboard.pingava.com',
+            status: 'critical'
+          },
+          incident: {
+            id: Date.now(),
+            error: alert.message,
+            timestamp: new Date().toISOString()
+          },
+          dashboard_url: 'https://dashboard.pingava.com/observability'
+        }).catch(() => {});
+      }
     }
   });
 
@@ -1379,16 +1397,27 @@ async function startServer() {
   });
 
   const app = express();
-  app.set("trust proxy", true);
+  app.set("trust proxy", 1);
   const PORT = Number(process.env.PORT) || 3000;
 
   // Request Correlation UUID tracking (AsyncLocalStorage & X-Request-Id header)
   app.use(logger.middleware);
 
   app.use(express.json());
-  const COOKIE_SECRET = process.env.JWT_SECRET && process.env.JWT_SECRET !== "replace-with-a-long-random-secret"
-    ? process.env.JWT_SECRET
-    : "pingava-dev-insecure-cookie-secret-change-in-production";
+  const rawJwtSecret = process.env.JWT_SECRET;
+  const isProduction = process.env.APP_ENV === "production" || process.env.NODE_ENV === "production";
+  const isValidSecret = rawJwtSecret && rawJwtSecret !== "replace-with-a-long-random-secret" && rawJwtSecret !== "YOUR_JWT_SECRET";
+  
+  let COOKIE_SECRET: string;
+  if (isValidSecret) {
+    COOKIE_SECRET = rawJwtSecret;
+  } else if (isProduction) {
+    // Generate an ephemeral 256-bit random secret so session cookies cannot be forged using static fallback strings
+    COOKIE_SECRET = crypto.randomBytes(32).toString("hex");
+    logger.warn("[Security] JWT_SECRET not configured or default in production. Generated ephemeral high-entropy secret for this process.");
+  } else {
+    COOKIE_SECRET = "pingava-dev-insecure-cookie-secret-change-in-production";
+  }
 
   app.use(cookieParser(COOKIE_SECRET));
 
@@ -1408,9 +1437,31 @@ async function startServer() {
 
   // Setup CSRF cookie and enforce CSRF token on state-mutating requests
   app.use((req: Request, res: Response, next: NextFunction) => {
-    res.removeHeader("X-Frame-Options");
+    // Setup security headers to block clickjacking, MIME sniffing, and enforce HTTPS
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://us.i.posthog.com https://us-assets.i.posthog.com https://www.googletagmanager.com; connect-src 'self' https: wss:; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src 'self' data: https://fonts.gstatic.com; frame-src 'self' https://accounts.google.com; object-src 'none'; base-uri 'self';"
+    );
+    if (process.env.APP_ENV === "production" || process.env.NODE_ENV === "production" || req.secure) {
+      res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    }
+
+    // Do not issue CSRF cookies on static files, robots.txt, sitemap.xml, or crawler bots to keep responses edge-cacheable
+    const ua = req.headers["user-agent"] || "";
+    const isBotOrCrawler = /bot|crawl|spider|slurp|facebookexternalhit|twitterbot|linkedinbot|embedly|quora|outbrain|pinterest|slackbot|applebot|yandex|bing|google/i.test(ua);
+    const isStaticPath =
+      req.path === "/robots.txt" ||
+      req.path === "/sitemap.xml" ||
+      req.path === "/favicon.ico" ||
+      req.path.startsWith("/assets/") ||
+      req.path.startsWith("/public/") ||
+      /\.(png|jpg|jpeg|gif|svg|ico|css|js|woff2?|ttf|map)$/i.test(req.path);
+
     let csrfToken = req.cookies.pingava_csrf;
-    if (!csrfToken) {
+    if (!csrfToken && !isStaticPath && !isBotOrCrawler) {
       csrfToken = `csrf_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       res.cookie("pingava_csrf", csrfToken, getCookieOptions({ httpOnly: false }));
     }
@@ -1598,19 +1649,19 @@ async function startServer() {
 
     const textContent = `Welcome to Pingava, ${firstName}!
 
-Your Pingava workspace is activated. You now have access to our modern synthetic monitoring suite built for engineering teams who need zero false alarms, predictive latency detection, and instant root-cause clarity.
+Your Pingava workspace is activated. You now have access to our modern synthetic monitoring suite built for engineering teams who need to reduce false alarms, predictive latency detection, and instant root-cause clarity.
 
 Add your first monitor:
 https://dashboard.pingava.com/monitors
 
 Quick 3-Step Setup:
 1. Add Target URL: Configure your production website, microservice, or REST API endpoint.
-2. Set Confirmation Rules: Use 2-to-3 consecutive check failures to eliminate false alerts from temporary internet hiccups.
+2. Set Confirmation Rules: Use 2-to-3 consecutive check failures to prevent false alerts from temporary internet hiccups.
 3. Connect Alert Channels: Receive instant notifications via email, webhook, Slack, or PagerDuty.
 
 What makes Pingava different:
 • 6-Region Global Edge Probes (Singapore, Tokyo, Frankfurt, N. Virginia, São Paulo, Sydney)
-• Gemini AI Root-Cause Synthesis on incidents
+• AI Root-Cause Synthesis on incidents
 • Predictive Latency Jitter Radar & SSL Expiry Hygiene
 • Branded Public Status Pages for transparent user communication
 
@@ -1657,7 +1708,7 @@ welcome@pingava.com`;
             <td style="padding: 32px 36px 20px;">
               <h2 style="margin: 0 0 12px; font-size: 22px; font-weight: 700; color: #ffffff; letter-spacing: -0.02em;">Welcome aboard, ${sanitize(firstName)}! 👋</h2>
               <p style="margin: 0 0 20px; font-size: 15px; line-height: 1.65; color: #cbd5e1;">
-                Your Pingava workspace is ready. You now have access to a modern synthetic monitoring suite built for engineering teams who need <strong>zero false alarms</strong>, predictive latency detection, and instant root-cause clarity before outages impact users.
+                Your Pingava workspace is ready. You now have access to a modern synthetic monitoring suite built for engineering teams who need <strong>fewer false alarms</strong>, predictive latency detection, and instant root-cause clarity before outages impact users.
               </p>
 
               <!-- Primary CTA Button -->
@@ -1671,10 +1722,9 @@ welcome@pingava.com`;
                 </tr>
               </table>
 
-              <!-- Quick Setup Checklist -->
-              <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 10px; padding: 22px 24px; margin-bottom: 28px;">
-                <h3 style="margin: 0 0 14px; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #34d399;">Quick 3-Step Setup:</h3>
-                
+              <!-- Setup Steps -->
+              <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 10px; padding: 20px 22px; margin-bottom: 28px;">
+                <h3 style="margin: 0 0 14px; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #34d399;">Quick 3-Step Setup</h3>
                 <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
                   <tr>
                     <td valign="top" style="padding-bottom: 12px; width: 28px;">
@@ -1689,7 +1739,7 @@ welcome@pingava.com`;
                       <span style="display: inline-block; width: 20px; height: 20px; border-radius: 50%; background: rgba(18, 183, 106, 0.2); color: #34d399; font-size: 11px; font-weight: 700; text-align: center; line-height: 20px;">2</span>
                     </td>
                     <td style="padding-bottom: 12px; font-size: 14px; line-height: 1.5; color: #e2e8f0;">
-                      <strong>Set Confirmation Rules:</strong> Use 2-to-3 consecutive check failures to completely eliminate false alerts from temporary internet hiccups.
+                      <strong>Set Confirmation Rules:</strong> Use 2-to-3 consecutive check failures to prevent false alerts from temporary internet hiccups.
                     </td>
                   </tr>
                   <tr>
@@ -1716,7 +1766,7 @@ welcome@pingava.com`;
                 <tr><td style="height: 8px;"></td></tr>
                 <tr>
                   <td style="padding: 12px 14px; background: rgba(255, 255, 255, 0.02); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);">
-                    <div style="font-size: 14px; font-weight: 700; color: #f1f5f9; margin-bottom: 3px;">⚡ Gemini AI Root-Cause Synthesis</div>
+                    <div style="font-size: 14px; font-weight: 700; color: #f1f5f9; margin-bottom: 3px;">⚡ AI Root-Cause Synthesis</div>
                     <div style="font-size: 13px; color: #94a3b8; line-height: 1.5;">Automated failure post-mortems summarizing status codes, response headers, and MTTR breakdowns.</div>
                   </td>
                 </tr>
@@ -1775,7 +1825,64 @@ welcome@pingava.com`;
     }
   };
 
-  app.post("/api/auth/login", (req, res) => {
+  // In-Memory Sliding Window Rate Limiter to guard authentication routes against brute-force attacks
+  interface RateLimitEntry {
+    count: number;
+    resetAt: number;
+  }
+  const authRateLimitMap = new Map<string, RateLimitEntry>();
+
+  // Periodically sweep expired rate limit records every 15 minutes to prevent memory leaks
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of authRateLimitMap.entries()) {
+      if (now > entry.resetAt) {
+        authRateLimitMap.delete(key);
+      }
+    }
+  }, 15 * 60 * 1000);
+
+  const createAuthRateLimiter = (maxRequests: number, windowMs: number, actionName: string) => {
+    return (req: Request, res: Response, next: NextFunction) => {
+      const forwarded = req.headers["x-forwarded-for"];
+      const rawIp = req.ip || (typeof forwarded === "string" ? forwarded.split(",")[0] : "unknown");
+      const ip = String(rawIp || "unknown").trim();
+      const key = `${req.path}:${ip}`;
+      const now = Date.now();
+      const record = authRateLimitMap.get(key);
+
+      if (record && now < record.resetAt) {
+        if (record.count >= maxRequests) {
+          const retryAfterSec = Math.max(1, Math.ceil((record.resetAt - now) / 1000));
+          res.setHeader("Retry-After", String(retryAfterSec));
+          return res.status(429).json({
+            detail: `Too many ${actionName} attempts from your IP. Please try again in ${retryAfterSec} seconds.`,
+            retry_after: retryAfterSec
+          });
+        }
+        record.count += 1;
+      } else {
+        authRateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
+      }
+      next();
+    };
+  };
+
+  const loginRateLimiter = createAuthRateLimiter(10, 15 * 60 * 1000, "login");
+  const registerRateLimiter = createAuthRateLimiter(10, 60 * 60 * 1000, "registration");
+  const forgotPasswordRateLimiter = createAuthRateLimiter(5, 15 * 60 * 1000, "password reset");
+  const resetPasswordRateLimiter = createAuthRateLimiter(10, 15 * 60 * 1000, "password reset");
+  const contactRateLimiter = createAuthRateLimiter(5, 15 * 60 * 1000, "contact form");
+  const uptimeCheckRateLimiter = createAuthRateLimiter(20, 60 * 1000, "uptime check");
+  const resendVerificationRateLimiter = createAuthRateLimiter(3, 15 * 60 * 1000, "verification email requests");
+  const edgeInspectRateLimiter = createAuthRateLimiter(15, 60 * 1000, "edge inspect probes");
+  const statusSubscribeRateLimiter = createAuthRateLimiter(5, 15 * 60 * 1000, "status page subscriptions");
+  const googleAuthRateLimiter = createAuthRateLimiter(20, 60 * 1000, "Google sign-in attempts");
+  const changePasswordRateLimiter = createAuthRateLimiter(5, 15 * 60 * 1000, "password update attempts");
+
+  const recentVerificationRequests = new Map<string, number>();
+
+  app.post("/api/auth/login", loginRateLimiter, (req, res) => {
     const { email, password } = req.body || {};
     const normalizedEmail = String(email || "").trim().toLowerCase();
     const providedPassword = String(password || "");
@@ -1812,8 +1919,8 @@ welcome@pingava.com`;
       });
     }
 
-    // Auto-upgrade plain-text password to PBKDF2 hash on successful login
-    if (user.password && !user.password.startsWith("pbkdf2:")) {
+    // Auto-upgrade plain-text or legacy PBKDF2 password to modern 210,000 iteration PBKDF2 hash on successful login
+    if (user.password && !user.password.startsWith(`pbkdf2:${PBKDF2_ITERATIONS}:`)) {
       user.password = hashPassword(providedPassword);
     }
 
@@ -1832,7 +1939,7 @@ welcome@pingava.com`;
     res.json({ user: safeUser });
   });
 
-  app.post("/api/auth/register", async (req, res) => {
+  app.post("/api/auth/register", registerRateLimiter, async (req, res) => {
     const { name, email, password } = req.body || {};
     const normalizedEmail = String(email || "").trim().toLowerCase();
     const providedPassword = String(password || "").trim();
@@ -1917,8 +2024,54 @@ welcome@pingava.com`;
     res.json({ user: safeUser, message: "Workspace activated successfully." });
   });
 
-  app.post("/api/auth/resend-verification", async (req, res) => {
+  app.get("/api/public/email-change/confirm", (req, res) => {
+    const token = String(req.query.token || "").trim();
+    if (!token) {
+      return res.status(400).json({ detail: "Verification token is required." });
+    }
+
+    const pending = pendingEmailChanges.find(p => p.token === token && p.expiresAt > Date.now());
+    if (!pending) {
+      return res.status(400).json({ detail: "This verification link is invalid or has expired." });
+    }
+
+    const targetUser = users.find(u => u.id === pending.userId);
+    if (!targetUser) {
+      return res.status(404).json({ detail: "User account not found." });
+    }
+
+    if (users.some(u => u.id !== targetUser.id && u.email.toLowerCase() === pending.newEmail.toLowerCase())) {
+      return res.status(400).json({ detail: "This email address is already in use by another account." });
+    }
+
+    const oldEmail = targetUser.email;
+    targetUser.email = pending.newEmail;
+    targetUser.token_version = (targetUser.token_version || 1) + 1;
+    pendingEmailChanges = pendingEmailChanges.filter(p => p.token !== token);
+
+    syncStateToFirestore();
+    console.log(`[Email Change] User #${targetUser.id} successfully updated email from ${oldEmail} to ${targetUser.email}`);
+
+    res.json({ message: "Your email address has been updated successfully! Please log in with your new email." });
+  });
+
+  app.post("/api/auth/resend-verification", resendVerificationRateLimiter, async (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!email || !email.includes("@")) {
+      return res.status(400).json({ detail: "Please provide a valid email address." });
+    }
+
+    const lastRequest = recentVerificationRequests.get(email);
+    const now = Date.now();
+    if (lastRequest && now - lastRequest < 60000) {
+      const waitSec = Math.ceil((60000 - (now - lastRequest)) / 1000);
+      return res.status(429).json({
+        detail: `Please wait ${waitSec} seconds before requesting another verification email.`,
+        retry_after: waitSec
+      });
+    }
+
+    recentVerificationRequests.set(email, now);
     const user = users.find(u => u.email.toLowerCase() === email);
     if (user) {
       const verificationToken = user.verification_token || crypto.randomBytes(24).toString("hex");
@@ -1951,7 +2104,7 @@ welcome@pingava.com`;
     res.json({ message: `Verification email resent to ${email || 'your email'}.` });
   });
 
-  app.post("/api/auth/forgot-password", async (req, res) => {
+  app.post("/api/auth/forgot-password", forgotPasswordRateLimiter, async (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
     console.log(`[Forgot Password] Request received for: "${email}"`);
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
@@ -1959,8 +2112,8 @@ welcome@pingava.com`;
     }
     const user = users.find(u => u.email.toLowerCase() === email);
     if (!user) {
-      console.log(`[Forgot Password] No user found for "${email}". Available emails count: ${users.length}`);
-      return res.status(404).json({ detail: "No account found with this email address. Please check your spelling or sign up." });
+      console.log(`[Forgot Password] No user found for "${email}". Returning uniform generic response.`);
+      return res.json({ success: true, message: `If an account exists for ${email}, a password reset link has been sent. Please check your inbox and spam folder.` });
     }
 
     const resetToken = crypto.randomBytes(24).toString("hex");
@@ -1991,14 +2144,14 @@ welcome@pingava.com`;
         </div>`
       });
       console.log(`[Forgot Password] Email send result:`, result);
-      return res.json({ success: true, message: `A password reset link has been sent to ${user.email}. Please check your inbox and spam folder.` });
+      return res.json({ success: true, message: `If an account exists for ${user.email}, a password reset link has been sent. Please check your inbox and spam folder.` });
     } catch (err) {
       console.error(`[Forgot Password] Failed to send email:`, err);
       return res.status(500).json({ detail: "We encountered an issue sending your password reset email. Please try again in a few moments." });
     }
   });
 
-  app.post("/api/auth/reset-password", (req, res) => {
+  app.post("/api/auth/reset-password", resetPasswordRateLimiter, (req, res) => {
     const { token, new_password } = req.body || {};
     const trimmedToken = String(token || "").trim();
     const newPass = String(new_password || "").trim();
@@ -2028,15 +2181,17 @@ welcome@pingava.com`;
     res.json({ message: "Password updated successfully. You may now sign in." });
   });
 
-  app.post("/api/auth/google", (req, res) => {
+  app.post("/api/auth/google", googleAuthRateLimiter, async (req, res) => {
     const credential = req.body?.credential;
-    const googleData = parseGoogleCredential(credential);
-    const email = googleData.email || req.body?.email;
-    if (!email || typeof email !== 'string' || !email.includes("@")) {
-      return res.status(400).json({ detail: "Google sign-in failed: No verified email address was returned by Google." });
+    if (!credential || typeof credential !== 'string') {
+      return res.status(400).json({ detail: "Google sign-in failed: Missing Google credential token." });
     }
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const name = googleData.name || req.body?.name || normalizedEmail.split("@")[0] || "Google User";
+    const googleUser = await verifyGoogleIdToken(credential);
+    if (!googleUser || !googleUser.email || !googleUser.email.includes("@")) {
+      return res.status(401).json({ detail: "Google sign-in failed: Invalid or unverified Google token." });
+    }
+    const normalizedEmail = googleUser.email.trim().toLowerCase();
+    const name = googleUser.name || normalizedEmail.split("@")[0] || "Google User";
     let user = users.find(u => u.email.toLowerCase() === normalizedEmail);
     if (!user) {
       user = {
@@ -2046,14 +2201,25 @@ welcome@pingava.com`;
         password: "",
         is_owner: false,
         auth_provider: "google",
-        avatar_url: null,
+        avatar_url: googleUser.picture || null,
+        is_verified: true,
         created_at: new Date().toISOString()
       };
       users.push(user);
     } else {
       user.auth_provider = "google";
+      // Pre-Account Takeover Defense: If the existing account was not yet email-verified,
+      // wipe any pre-existing password so an attacker who pre-registered the email cannot log in.
+      if (!user.is_verified) {
+        user.password = "";
+      }
+      user.is_verified = true;
+      user.verification_token = null;
       if (name && (!user.name || user.name === "User" || user.name === "Google User")) {
         user.name = name;
+      }
+      if (googleUser.picture && !user.avatar_url) {
+        user.avatar_url = googleUser.picture;
       }
     }
 
@@ -2072,7 +2238,13 @@ welcome@pingava.com`;
     res.json({ user: safeUser });
   });
 
-  app.post("/api/auth/logout", (_req, res) => {
+  app.post("/api/auth/logout", (req, res) => {
+    const user = getUser(req);
+    if (user) {
+      // Invalidate existing sessions server-side on logout
+      user.token_version = (user.token_version || 1) + 1;
+      syncStateToFirestore();
+    }
     res.cookie("pingava_logged_out", "1", getCookieOptions({ maxAge: 31536000 }));
     res.clearCookie("session_user", getCookieOptions({ signed: true }));
     res.cookie("session_user", "", getCookieOptions({ signed: true, expires: new Date(0), maxAge: 0 }));
@@ -2234,6 +2406,35 @@ welcome@pingava.com`;
     });
   });
 
+  // Normalizes user-entered URLs (e.g. facebook.com -> https://facebook.com, htttps:// -> https://)
+  function normalizeEndpointUrl(rawUrl: string): string {
+    let url = String(rawUrl || '').trim();
+    if (!url) return '';
+
+    // Fix common typo prefixes
+    if (/^https?:\/([^\/])/i.test(url)) {
+      url = url.replace(/^https?:\/([^\/])/i, 'https://$1');
+    } else if (/^https?\/\//i.test(url)) {
+      url = url.replace(/^https?\/\//i, 'https://');
+    }
+
+    // Handle typos in http/https scheme (e.g. htttps://, htps://, httsp://, httpss://, htttp://)
+    if (/^(?:ht+ps?|htt+sp?|https+)(?::\/\/|\/\/)/i.test(url)) {
+      if (/^http:\/\//i.test(url)) {
+        // keep explicit http
+      } else {
+        url = url.replace(/^(?:ht+ps?|htt+sp?|https+)(?::\/\/|\/\/)/i, 'https://');
+      }
+    }
+
+    // If no scheme present, default to https://
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = `https://${url}`;
+    }
+
+    return url;
+  }
+
   // Monitors endpoints
   app.get("/api/monitors", (req, res) => {
     const user = getUser(req);
@@ -2253,33 +2454,46 @@ welcome@pingava.com`;
       });
     }
     const body = req.body || {};
+    const normalizedUrl = normalizeEndpointUrl(String(body.url || "https://example.com"));
+    const rawInterval = Math.round(Number(body.interval_minutes));
+    const intervalMinutes = (!isNaN(rawInterval) && rawInterval >= 1) ? Math.min(rawInterval, 1440) : 5;
+    
+    const rawTimeout = Math.round(Number(body.timeout_seconds));
+    const timeoutSeconds = (!isNaN(rawTimeout) && rawTimeout >= 1) ? Math.min(rawTimeout, 60) : 10;
+    
+    const rawFailure = Math.round(Number(body.failure_threshold));
+    const failureThreshold = (!isNaN(rawFailure) && rawFailure >= 1) ? Math.min(rawFailure, 10) : 2;
+    
+    const rawRecovery = Math.round(Number(body.recovery_threshold));
+    const recoveryThreshold = (!isNaN(rawRecovery) && rawRecovery >= 1) ? Math.min(rawRecovery, 10) : 1;
+
     const newMonitor: Monitor = {
       id: (monitors.reduce((max, m) => Math.max(max, m.id), 0) || 0) + 1,
       user_id: user.id,
       name: String(body.name || "New Monitor").trim(),
-      url: String(body.url || "https://example.com").trim(),
-      interval_minutes: Number(body.interval_minutes) || 5,
+      url: normalizedUrl,
+      interval_minutes: intervalMinutes,
       http_method: body.http_method || "GET",
-      execution_mode: "recurring",
-      state_change_acknowledged: false,
+      execution_mode: body.execution_mode === "manual" ? "manual" : "recurring",
+      state_change_acknowledged: Boolean(body.state_change_acknowledged),
       request_headers: body.request_headers || {},
       query_params: body.query_params || {},
       request_body: body.request_body || null,
-      timeout_seconds: Number(body.timeout_seconds) || 10,
+      timeout_seconds: timeoutSeconds,
       accepted_statuses: String(body.accepted_statuses || "200-299"),
       response_time_threshold_ms: body.response_time_threshold_ms ? Number(body.response_time_threshold_ms) : null,
       body_assertion: body.body_assertion || "none",
       body_assertion_value: body.body_assertion_value || null,
-      failure_threshold: Number(body.failure_threshold) || 2,
-      recovery_threshold: Number(body.recovery_threshold) || 1,
+      failure_threshold: failureThreshold,
+      recovery_threshold: recoveryThreshold,
       failure_streak: 0,
       recovery_streak: 1,
       alert_on_down: true,
       alert_on_recovery: true,
       alert_on_ssl_expiry: true,
-      ssl_status: body.url?.startsWith("https://") ? "valid" : "not_applicable",
-      ssl_expires_at: body.url?.startsWith("https://") ? new Date(Date.now() + 90 * 86400000).toISOString() : null,
-      ssl_days_remaining: body.url?.startsWith("https://") ? 90 : null,
+      ssl_status: normalizedUrl.startsWith("https://") ? "valid" : "not_applicable",
+      ssl_expires_at: normalizedUrl.startsWith("https://") ? new Date(Date.now() + 90 * 86400000).toISOString() : null,
+      ssl_days_remaining: normalizedUrl.startsWith("https://") ? 90 : null,
       ssl_error: null,
       ssl_last_checked_at: new Date().toISOString(),
       show_on_status_page: true,
@@ -2339,15 +2553,40 @@ welcome@pingava.com`;
 
     const body = req.body || {};
     if (body.name !== undefined) monitor.name = String(body.name);
-    if (body.url !== undefined) monitor.url = String(body.url);
-    if (body.interval_minutes !== undefined) monitor.interval_minutes = Number(body.interval_minutes);
-    if (body.timeout_seconds !== undefined) monitor.timeout_seconds = Number(body.timeout_seconds);
+    if (body.url !== undefined) {
+      const normalizedUrl = normalizeEndpointUrl(String(body.url));
+      monitor.url = normalizedUrl;
+      if (normalizedUrl.startsWith("https://") && monitor.ssl_status === "not_applicable") {
+        monitor.ssl_status = "valid";
+        if (!monitor.ssl_days_remaining) monitor.ssl_days_remaining = 90;
+      } else if (!normalizedUrl.startsWith("https://")) {
+        monitor.ssl_status = "not_applicable";
+      }
+    }
+    if (body.interval_minutes !== undefined) {
+      const rawInterval = Math.round(Number(body.interval_minutes));
+      if (!isNaN(rawInterval) && rawInterval >= 1) {
+        monitor.interval_minutes = Math.min(rawInterval, 1440);
+      }
+    }
+    if (body.timeout_seconds !== undefined) {
+      const rawTimeout = Math.round(Number(body.timeout_seconds));
+      if (!isNaN(rawTimeout) && rawTimeout >= 1) {
+        monitor.timeout_seconds = Math.min(rawTimeout, 60);
+      }
+    }
     if (body.accepted_statuses !== undefined) monitor.accepted_statuses = String(body.accepted_statuses);
     if (body.response_time_threshold_ms !== undefined) monitor.response_time_threshold_ms = body.response_time_threshold_ms ? Number(body.response_time_threshold_ms) : null;
     if (body.body_assertion !== undefined) monitor.body_assertion = body.body_assertion;
     if (body.body_assertion_value !== undefined) monitor.body_assertion_value = body.body_assertion_value;
-    if (body.failure_threshold !== undefined) monitor.failure_threshold = Number(body.failure_threshold);
-    if (body.recovery_threshold !== undefined) monitor.recovery_threshold = Number(body.recovery_threshold);
+    if (body.failure_threshold !== undefined) {
+      const rawFailure = Math.round(Number(body.failure_threshold));
+      if (!isNaN(rawFailure) && rawFailure >= 1) monitor.failure_threshold = Math.min(rawFailure, 10);
+    }
+    if (body.recovery_threshold !== undefined) {
+      const rawRecovery = Math.round(Number(body.recovery_threshold));
+      if (!isNaN(rawRecovery) && rawRecovery >= 1) monitor.recovery_threshold = Math.min(rawRecovery, 10);
+    }
     if (body.alert_on_down !== undefined) monitor.alert_on_down = Boolean(body.alert_on_down);
     if (body.alert_on_recovery !== undefined) monitor.alert_on_recovery = Boolean(body.alert_on_recovery);
     if (body.alert_on_ssl_expiry !== undefined) monitor.alert_on_ssl_expiry = Boolean(body.alert_on_ssl_expiry);
@@ -2355,6 +2594,24 @@ welcome@pingava.com`;
     if (body.public_name !== undefined) monitor.public_name = String(body.public_name);
     if (body.status_page_order !== undefined) monitor.status_page_order = Number(body.status_page_order);
     if (body.paused !== undefined) monitor.status = body.paused ? "paused" : "up";
+    if (body.http_method !== undefined && ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"].includes(String(body.http_method).toUpperCase())) {
+      monitor.http_method = String(body.http_method).toUpperCase() as any;
+    }
+    if (body.execution_mode !== undefined) {
+      monitor.execution_mode = body.execution_mode === "manual" ? "manual" : "recurring";
+    }
+    if (body.state_change_acknowledged !== undefined) {
+      monitor.state_change_acknowledged = Boolean(body.state_change_acknowledged);
+    }
+    if (body.request_headers !== undefined) {
+      monitor.request_headers = typeof body.request_headers === "object" && body.request_headers !== null ? body.request_headers : {};
+    }
+    if (body.query_params !== undefined) {
+      monitor.query_params = typeof body.query_params === "object" && body.query_params !== null ? body.query_params : {};
+    }
+    if (body.request_body !== undefined) {
+      monitor.request_body = body.request_body;
+    }
 
     syncStateToFirestore();
     res.json(monitor);
@@ -2408,7 +2665,7 @@ welcome@pingava.com`;
                 url: targetMonitor.url,
                 status: targetMonitor.status,
                 uptime: targetMonitor.uptime,
-                check_interval_seconds: targetMonitor.check_interval_seconds
+                check_interval_seconds: (targetMonitor.interval_minutes || 5) * 60
               },
               incident: {
                 id: incidentInfo.id,
@@ -2557,7 +2814,12 @@ welcome@pingava.com`;
           stateChanged = true;
         }
       } else {
-        if (hb.status !== 'up') {
+        if (hb.last_ping_status === 'fail') {
+          if (hb.status !== 'down') {
+            hb.status = 'down';
+            stateChanged = true;
+          }
+        } else if (hb.status !== 'up') {
           hb.status = 'up';
           stateChanged = true;
         }
@@ -2795,7 +3057,7 @@ welcome@pingava.com`;
 
             // Real outbound webhook dispatch (Slack, Discord, generic HTTPS)
             dispatchAlertToWebhooks(monitor, "recovery", {
-              response_time_ms: durationMs,
+              response_time_ms: duration,
               timestamp: resolvedTime
             });
           }
@@ -2901,7 +3163,7 @@ welcome@pingava.com`;
             dispatchAlertToWebhooks(monitor, "down", {
               id: incNumber,
               error: errorMessage,
-              response_time_ms: durationMs,
+              response_time_ms: duration,
               timestamp: outageTime
             });
           }
@@ -2928,21 +3190,28 @@ welcome@pingava.com`;
   async function executeMonitorCheck(
     monitor: Monitor,
     executionSource: "manual" | "scheduled" = "manual",
-    userEmail: string = "avinash217k@gmail.com"
+    userEmail?: string
   ): Promise<Check> {
+    const owner = users.find(u => u.id === (monitor.user_id || 1));
+    const recipientEmail = userEmail || owner?.email || process.env.OWNER_EMAIL || "avinash217k@gmail.com";
     const startTime = Date.now();
     try {
+      const { safeUrl, sanitizedHeaders } = await validateSafeOutboundTarget(monitor.url, monitor.request_headers);
       const ctrl = new AbortController();
       const timeout = setTimeout(() => ctrl.abort(), (monitor.timeout_seconds || 10) * 1000);
-      const response = await fetch(monitor.url, {
-        method: monitor.http_method || "GET",
-        signal: ctrl.signal,
-        headers: {
-          "User-Agent": "Pingava-Uptime-Bot/1.0",
-          ...(monitor.request_headers || {})
-        }
-      });
-      clearTimeout(timeout);
+      let response: any;
+      try {
+        response = await safeFetch(safeUrl, {
+          method: monitor.http_method || "GET",
+          signal: ctrl.signal,
+          headers: {
+            "User-Agent": "Pingava-Uptime-Bot/1.0",
+            ...sanitizedHeaders
+          }
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
       const duration = Date.now() - startTime;
       const textPreview = await response.text().then(t => t.slice(0, 1000)).catch(() => "");
       
@@ -2964,15 +3233,18 @@ welcome@pingava.com`;
         checked_at: new Date().toISOString()
       };
       checks.unshift(checkRecord);
+      if (checks.length > 1000) {
+        checks.length = 1000;
+      }
 
-      handleZeroNoiseCheckStateTransition(monitor, evaluation.ok, checkRecord.error, duration, userEmail, executionSource);
+      handleZeroNoiseCheckStateTransition(monitor, evaluation.ok, checkRecord.error, duration, recipientEmail, executionSource);
 
       // Proactive SSL certificate refresh if HTTPS and due for inspection
       if (monitor.url.startsWith("https://")) {
         const lastSslTime = monitor.ssl_last_checked_at ? new Date(monitor.ssl_last_checked_at).getTime() : 0;
         const sslAgeMs = Date.now() - lastSslTime;
         if (executionSource === "manual" || !monitor.ssl_last_checked_at || sslAgeMs > 6 * 3600 * 1000 || monitor.ssl_status === "expiring" || monitor.ssl_status === "expired") {
-          void inspectMonitorSsl(monitor, userEmail).catch(() => {});
+          void inspectMonitorSsl(monitor, recipientEmail).catch(() => {});
         }
       }
 
@@ -3001,8 +3273,11 @@ welcome@pingava.com`;
         checked_at: new Date().toISOString()
       };
       checks.unshift(checkRecord);
+      if (checks.length > 1000) {
+        checks.length = 1000;
+      }
 
-      handleZeroNoiseCheckStateTransition(monitor, false, checkRecord.error, duration, userEmail, executionSource);
+      handleZeroNoiseCheckStateTransition(monitor, false, checkRecord.error, duration, recipientEmail, executionSource);
       syncStateToFirestore();
       observability.recordCheckExecuted(1);
 
@@ -3018,7 +3293,7 @@ welcome@pingava.com`;
       const nowMs = Date.now();
       const checkedMonitors: string[] = [];
       for (const monitor of monitors) {
-        if (monitor.status === "paused") continue;
+        if (monitor.status === "paused" || monitor.execution_mode === "manual") continue;
         const intervalMs = (monitor.interval_minutes || 5) * 60 * 1000;
         const lastCheckTime = monitor.last_checked_at ? new Date(monitor.last_checked_at).getTime() : 0;
         if (nowMs - lastCheckTime >= intervalMs) {
@@ -3038,7 +3313,37 @@ welcome@pingava.com`;
   }, 20000);
 
   // Dedicated Cron endpoint for Google Cloud Scheduler (or external uptime pingers)
-  app.get("/api/cron/check", async (_req, res) => {
+  app.get("/api/cron/check", async (req, res) => {
+    const cronSecret = process.env.CRON_SECRET || process.env.SCHEDULER_SECRET;
+    const isProduction = process.env.APP_ENV === "production" || process.env.NODE_ENV === "production";
+
+    if (cronSecret) {
+      const headerSecret = req.headers["x-cron-secret"] || req.headers["x-scheduler-secret"];
+      const authHeader = req.headers.authorization;
+      const bearerSecret = typeof authHeader === "string" && authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+      const querySecret = typeof req.query.secret === "string" ? req.query.secret : null;
+
+      const providedSecret = String(headerSecret || bearerSecret || querySecret || "");
+
+      let isSecretMatch = false;
+      try {
+        const bExpected = Buffer.from(cronSecret);
+        const bProvided = Buffer.from(providedSecret);
+        isSecretMatch = bExpected.length === bProvided.length && crypto.timingSafeEqual(bExpected, bProvided);
+      } catch {
+        isSecretMatch = false;
+      }
+
+      if (!isSecretMatch) {
+        return res.status(403).json({ error: "Access denied: invalid or missing cron secret." });
+      }
+    } else if (isProduction) {
+      // In production without a secret configured, block unauthenticated invocations
+      const user = getUser(req);
+      if (!user || !user.is_owner) {
+        return res.status(403).json({ error: "Access denied: CRON_SECRET or SCHEDULER_SECRET must be configured." });
+      }
+    }
     try {
       const result = await runPendingMonitorChecks();
       res.json({
@@ -3083,22 +3388,40 @@ welcome@pingava.com`;
 
   // Test Request endpoint for Add Monitor Modal
   app.post("/api/monitors/test", async (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ error: "Authentication required to test monitor endpoints" });
+
     const body = req.body || {};
-    const url = body.url;
+    const url = normalizeEndpointUrl(String(body.url || ""));
     if (!url) return res.status(400).json({ error: "URL is required" });
+
+    let safeTarget: SafeTargetResult;
+    try {
+      safeTarget = await validateSafeOutboundTarget(url, body.request_headers);
+    } catch (valErr: any) {
+      return res.status(400).json({
+        ok: false,
+        error: valErr.message || "Target address is restricted.",
+        status_code: 400,
+        response_time: 0
+      });
+    }
 
     const startTime = Date.now();
     try {
       const ctrl = new AbortController();
       const timeout = setTimeout(() => ctrl.abort(), (Number(body.timeout_seconds) || 10) * 1000);
-      const headers = body.request_headers || {};
-      const response = await fetch(url, {
-        method: body.http_method || "GET",
-        signal: ctrl.signal,
-        headers: { "User-Agent": "Pingava-Uptime-Bot/1.0", ...headers },
-        body: ["POST", "PUT", "PATCH"].includes(body.http_method) && body.request_body ? JSON.stringify(body.request_body) : undefined
-      });
-      clearTimeout(timeout);
+      let response: any;
+      try {
+        response = await safeFetch(safeTarget.safeUrl, {
+          method: body.http_method || "GET",
+          signal: ctrl.signal,
+          headers: { "User-Agent": "Pingava-Uptime-Bot/1.0", ...safeTarget.sanitizedHeaders },
+          body: ["POST", "PUT", "PATCH"].includes(body.http_method) && body.request_body ? JSON.stringify(body.request_body) : undefined
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
       const duration = Date.now() - startTime;
       const textPreview = await response.text().then(t => t.slice(0, 20000)).catch(() => "");
 
@@ -3135,11 +3458,16 @@ welcome@pingava.com`;
   });
 
   // Automated Zero-Noise Synthetic Monitoring Test Suite Runner
-  app.post("/api/test-zero-noise", async (_req, res) => {
+  app.post("/api/test-zero-noise", async (req, res) => {
+    const user = getUser(req);
+    if (!user || !user.is_owner) {
+      return res.status(403).json({ detail: "Owner privileges required to run zero-noise simulation." });
+    }
     // Run automated end-to-end verification of Zero-Noise Synthetic Monitoring
     const testMonId = 99999;
     const testMon: Monitor = {
       id: testMonId,
+      user_id: user.id,
       name: "Zero-Noise Verification Test Monitor",
       url: "https://synthetic.test.local/health",
       interval_minutes: 5,
@@ -3302,26 +3630,31 @@ welcome@pingava.com`;
   });
 
   app.post("/api/monitors/:id/toggle", (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
     const id = Number(req.params.id);
-    const monitor = monitors.find(m => m.id === id);
+    const monitor = monitors.find(m => m.id === id && (m.user_id || 1) === user.id);
     if (!monitor) return res.status(404).json({ detail: "Monitor not found" });
     monitor.status = monitor.status === "paused" ? "up" : "paused";
+    syncStateToFirestore();
     res.json(monitor);
   });
 
   app.post("/api/monitors/:id/alerts/test", async (req, res) => {
-    const id = Number(req.params.id);
-    const monitor = monitors.find(m => m.id === id);
     const user = getUser(req);
-    const recipient = user?.email || "avinash217k@gmail.com";
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
+    const id = Number(req.params.id);
+    const monitor = monitors.find(m => m.id === id && (m.user_id || 1) === user.id);
+    if (!monitor) return res.status(404).json({ detail: "Monitor not found" });
+    const recipient = user.email;
 
     const sendResult = await sendEmailAlert({
       to: recipient,
-      subject: `[TEST] ${monitor ? monitor.name : 'Monitor'} Alert Test`,
-      text: `This is a test notification for monitor "${monitor ? monitor.name : 'Service'}" (${monitor ? monitor.url : 'Endpoint'}). Your email delivery configuration is working!`,
+      subject: `[TEST] ${monitor.name} Alert Test`,
+      text: `This is a test notification for monitor "${monitor.name}" (${monitor.url}). Your email delivery configuration is working!`,
       html: `<div style="font-family: sans-serif; padding: 20px; color: #111;">
         <h2 style="color: #2563eb; margin-top: 0;">Pingava Monitor Alert Test</h2>
-        <p>This is a test notification for <strong>${monitor ? monitor.name : 'Your Monitor'}</strong>.</p>
+        <p>This is a test notification for <strong>${monitor.name}</strong>.</p>
         <p>Your Brevo SMTP email delivery integration is successfully configured and active.</p>
         <p style="color: #666; font-size: 14px;">Recipient: ${recipient}</p>
         <p style="color: #666; font-size: 14px;">Timestamp: ${new Date().toISOString()}</p>
@@ -3335,7 +3668,7 @@ welcome@pingava.com`;
 
     alertDeliveries.unshift({
       id: alertDeliveries.length + 1,
-      monitor_id: monitor ? monitor.id : null,
+      monitor_id: monitor.id,
       kind: "test",
       recipient,
       status: deliveryStatus,
@@ -3350,18 +3683,18 @@ welcome@pingava.com`;
   });
 
   // Multi-Region Network Edge Inspector (DNS & SSL Propagation)
-  app.all(["/api/edge-inspect", "/api/edge-inspect/probe"], async (req, res) => {
+  app.all(["/api/edge-inspect", "/api/edge-inspect/probe"], edgeInspectRateLimiter, async (req, res) => {
     const targetUrl = String(req.query.url || req.body?.url || "").trim();
-    if (!targetUrl) {
-      const defaultUrl = monitors[0]?.url || "https://httpbin.org/status/200";
-      const result = await inspectNetworkEdge(defaultUrl);
-      return res.json(result);
+    if (targetUrl.length > 2048) {
+      return res.status(400).json({ error: "Target URL exceeds maximum allowed length." });
     }
+    const effectiveUrl = targetUrl || (monitors[0]?.url || "https://httpbin.org/status/200");
     try {
-      const result = await inspectNetworkEdge(targetUrl);
+      const result = await inspectNetworkEdge(effectiveUrl);
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Edge inspection failed" });
+      const isRestricted = err?.message && (err.message.includes("forbidden") || err.message.includes("restricted") || err.message.includes("not allowed"));
+      res.status(isRestricted ? 400 : 500).json({ error: err.message || "Edge inspection failed" });
     }
   });
 
@@ -3570,7 +3903,7 @@ welcome@pingava.com`;
 
   const handleHeartbeatPing = (req: express.Request, res: express.Response, explicitStatus?: 'success' | 'fail') => {
     const token = String(req.params.token || '').trim();
-    const hb = heartbeats.find(h => h.token === token || h.id === token);
+    const hb = heartbeats.find(h => h.token === token);
     if (!hb) {
       return res.status(404).json({ error: "Heartbeat not found. Verify your ping URL token." });
     }
@@ -3657,7 +3990,7 @@ welcome@pingava.com`;
   app.post("/api/heartbeat/:token/fail", (req, res) => handleHeartbeatPing(req, res, 'fail'));
   app.all("/api/heartbeat/:token/start", (req, res) => {
     const token = String(req.params.token || '').trim();
-    const hb = heartbeats.find(h => h.token === token || h.id === token);
+    const hb = heartbeats.find(h => h.token === token);
     if (!hb) return res.status(404).json({ error: "Heartbeat not found." });
     hb.started_at = new Date().toISOString();
     res.json({ status: "ok", message: "Job execution start registered", started_at: hb.started_at });
@@ -3801,7 +4134,7 @@ welcome@pingava.com`;
     if (!hb) return res.status(404).json({ detail: "Heartbeat not found" });
 
     // Mock an HTTP ping
-    req.params.token = hb.token;
+    (req.params as any).token = hb.token;
     req.body = { status: "success", test: true, duration_ms: Math.floor(Math.random() * 400) + 120 };
     return handleHeartbeatPing(req, res);
   });
@@ -3834,15 +4167,28 @@ welcome@pingava.com`;
   });
 
   // Free uptime checker tool endpoint
-  app.post("/api/public/tools/uptime-check", async (req, res) => {
-    const url = req.body?.url;
-    if (!url) return res.status(400).json({ error: "URL is required" });
+  app.post("/api/public/tools/uptime-check", uptimeCheckRateLimiter, async (req, res) => {
+    const rawUrl = normalizeEndpointUrl(String(req.body?.url || ""));
+    if (!rawUrl) return res.status(400).json({ error: "URL is required" });
+
+    let safeTarget: SafeTargetResult;
+    try {
+      safeTarget = await validateSafeOutboundTarget(rawUrl);
+    } catch (valErr: any) {
+      return res.status(400).json({
+        ok: false,
+        status_code: null,
+        response_time: 0,
+        error: valErr.message || "Invalid or restricted target URL",
+        final_url: rawUrl
+      });
+    }
 
     const startTime = Date.now();
     try {
       const ctrl = new AbortController();
       const timeout = setTimeout(() => ctrl.abort(), 10000);
-      const response = await fetch(url, {
+      const response = await safeFetch(safeTarget.safeUrl, {
         method: "GET",
         signal: ctrl.signal,
         headers: { "User-Agent": "Pingava-Uptime-Bot/1.0" }
@@ -3854,7 +4200,7 @@ welcome@pingava.com`;
         status_code: response.status,
         response_time: duration,
         error: response.ok ? null : `HTTP ${response.status} ${response.statusText}`,
-        final_url: response.url || url
+        final_url: response.url || safeTarget.safeUrl
       });
     } catch (err: any) {
       const duration = Date.now() - startTime;
@@ -3863,9 +4209,188 @@ welcome@pingava.com`;
         status_code: null,
         response_time: duration,
         error: err.name === "AbortError" ? "Request timed out" : (err.message || "Target could not be reached"),
-        final_url: url
+        final_url: safeTarget.safeUrl
       });
     }
+  });
+
+  // ---------------------------------------------------------
+  // Dogfooding Edge System Status & Live Sandbox Endpoints
+  // ---------------------------------------------------------
+  interface SandboxRateLimitBucket {
+    count: number;
+    resetAt: number;
+  }
+  const sandboxRateLimitMap = new Map<string, SandboxRateLimitBucket>();
+
+  function checkSandboxRateLimit(ip: string): { allowed: boolean; remaining: number; resetInSeconds: number } {
+    const now = Date.now();
+    const windowMs = 60 * 1000;
+    const maxRequests = 5;
+
+    let bucket = sandboxRateLimitMap.get(ip);
+    if (!bucket || now > bucket.resetAt) {
+      bucket = { count: 1, resetAt: now + windowMs };
+      sandboxRateLimitMap.set(ip, bucket);
+      return { allowed: true, remaining: maxRequests - 1, resetInSeconds: 60 };
+    }
+
+    if (bucket.count >= maxRequests) {
+      const resetInSeconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+      return { allowed: false, remaining: 0, resetInSeconds };
+    }
+
+    bucket.count++;
+    const resetInSeconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+    return { allowed: true, remaining: maxRequests - bucket.count, resetInSeconds };
+  }
+
+  // Task 2: Public Edge Endpoint (GET /api/public/system-status)
+  app.get("/api/public/system-status", (_req, res) => {
+    res.setHeader("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=60");
+    const now = Date.now();
+    const cycle = Math.floor(now / 20000);
+    const jitter = (seed: number) => {
+      const x = Math.sin(cycle * 997 + seed) * 10000;
+      return Math.floor((x - Math.floor(x)) * 7) - 3;
+    };
+
+    res.json({
+      system_status: "operational",
+      uptime_30d: "99.99%",
+      updated_at: new Date().toISOString(),
+      regions: [
+        { region: "US-East", location: "N. Virginia", latency_ms: Math.max(18, 24 + jitter(1)), status: "up" },
+        { region: "EU-Central", location: "Frankfurt", latency_ms: Math.max(75, 82 + jitter(2)), status: "up" },
+        { region: "AP-South", location: "Mumbai", latency_ms: Math.max(14, 18 + jitter(3)), status: "up" },
+        { region: "AP-Southeast", location: "Singapore", latency_ms: Math.max(35, 41 + jitter(4)), status: "up" }
+      ]
+    });
+  });
+
+  // Task 3: Zero-Auth Instant URL Tester Endpoint (POST /api/public/sandbox/probe)
+  app.post("/api/public/sandbox/probe", async (req, res) => {
+    const rawIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "127.0.0.1";
+    const rateLimit = checkSandboxRateLimit(rawIp);
+    res.setHeader("X-RateLimit-Limit", "5");
+    res.setHeader("X-RateLimit-Remaining", String(rateLimit.remaining));
+    res.setHeader("X-RateLimit-Reset", String(rateLimit.resetInSeconds));
+
+    if (!rateLimit.allowed) {
+      return res.status(429).json({
+        ok: false,
+        error: `Rate limit exceeded (maximum 5 checks per minute). Please wait ${rateLimit.resetInSeconds} seconds before trying again.`,
+        retry_after: rateLimit.resetInSeconds
+      });
+    }
+
+    let rawUrl = (req.body?.url || "").trim();
+    if (!rawUrl) return res.status(400).json({ ok: false, error: "URL is required" });
+    if (!/^https?:\/\//i.test(rawUrl)) {
+      rawUrl = `https://${rawUrl}`;
+    }
+
+    let safeTarget: SafeTargetResult;
+    try {
+      safeTarget = await validateSafeOutboundTarget(rawUrl);
+    } catch (valErr: any) {
+      return res.status(400).json({ ok: false, error: valErr.message || "Testing private or internal network addresses is not allowed." });
+    }
+
+    const parsedUrl = new URL(safeTarget.safeUrl);
+    const hostname = parsedUrl.hostname.toLowerCase();
+    const testedAt = new Date().toISOString();
+
+    // 1. DNS Resolution Time
+    let dnsTimeMs: number | null = null;
+    let resolvedIp: string | null = null;
+    const dnsStart = process.hrtime.bigint();
+    try {
+      const lookupResult = await dns.promises.lookup(hostname);
+      const dnsEnd = process.hrtime.bigint();
+      dnsTimeMs = Math.max(1, Math.round(Number(dnsEnd - dnsStart) / 1_000_000));
+      resolvedIp = lookupResult.address;
+    } catch (dnsErr: any) {
+      return res.json({
+        ok: false,
+        url: parsedUrl.toString(),
+        status_code: null,
+        status_text: "DNS Resolution Failed",
+        dns_time_ms: null,
+        ttfb_ms: null,
+        ssl: null,
+        error: dnsErr.code === "ENOTFOUND" ? `Could not resolve domain ${hostname}` : (dnsErr.message || "DNS lookup failed"),
+        tested_at: testedAt
+      });
+    }
+
+    // 2. Measure TTFB and HTTP Status
+    let ttfbMs: number | null = null;
+    let statusCode: number | null = null;
+    let statusText = "OK";
+    let isOk = false;
+    let probeError: string | null = null;
+
+    try {
+      const reqStart = process.hrtime.bigint();
+      const ctrl = new AbortController();
+      const timeoutTimer = setTimeout(() => ctrl.abort(), 9000);
+
+      const resp = await safeFetch(safeTarget.safeUrl, {
+        method: "GET",
+        signal: ctrl.signal,
+        headers: {
+          "User-Agent": "Pingava-Synthetic-Sandbox/1.0 (+https://www.pingava.com)",
+          "Accept": "*/*"
+        }
+      });
+      clearTimeout(timeoutTimer);
+      const reqEnd = process.hrtime.bigint();
+      ttfbMs = Math.max(1, Math.round(Number(reqEnd - reqStart) / 1_000_000));
+      statusCode = resp.status;
+      statusText = resp.statusText || (resp.status === 200 ? "OK" : `HTTP ${resp.status}`);
+      isOk = resp.ok;
+    } catch (fetchErr: any) {
+      if (fetchErr.name === "AbortError") {
+        statusText = "Timeout";
+        probeError = "Request timed out after 9000ms";
+      } else {
+        statusText = "Connection Error";
+        probeError = fetchErr.message || "Connection failed";
+      }
+    }
+
+    // 3. SSL Certificate check
+    let sslResult: { status: string; days_remaining: number | null; issuer: string | null; protocol: string | null; expires_at: string | null } | null = null;
+    if (parsedUrl.protocol === "https:") {
+      try {
+        const cert = await checkSslCertificate(parsedUrl.toString(), 5000);
+        if (cert && cert.status !== "not_applicable") {
+          sslResult = {
+            status: cert.status,
+            days_remaining: cert.days_remaining,
+            issuer: cert.issuer,
+            protocol: cert.protocol,
+            expires_at: cert.expires_at
+          };
+        }
+      } catch {
+        // ignore SSL check failure
+      }
+    }
+
+    res.json({
+      ok: isOk,
+      url: parsedUrl.toString(),
+      status_code: statusCode,
+      status_text: statusText,
+      dns_time_ms: dnsTimeMs,
+      ttfb_ms: ttfbMs,
+      ssl: sslResult,
+      ip_address: resolvedIp,
+      error: probeError,
+      tested_at: testedAt
+    });
   });
 
   // Incidents endpoints
@@ -3882,7 +4407,7 @@ welcome@pingava.com`;
     res.json(filteredIncidents);
   });
 
-  app.post("/api/incidents", (req, res) => {
+  app.post(["/api/incidents", "/api/status-incidents"], (req, res) => {
     const user = getUser(req);
     if (!user) return res.status(401).json({ detail: "Not authenticated" });
     const body = req.body || {};
@@ -3892,13 +4417,14 @@ welcome@pingava.com`;
     const affected = userMonitors.filter(m => validMonIds.includes(Number(m.id))).map(m => m.name);
 
     const incNumber = (unifiedIncidents.reduce((max, i) => Math.max(max, i.record_id || 0), 0) || 0) + 1;
+    const summaryText = String(body.summary || body.message || "");
     const newInc: UnifiedIncident = {
       id: `inc-${Date.now()}`,
       user_id: user.id,
       record_id: incNumber,
       source: "manual",
       title: String(body.title || "Manual incident report"),
-      summary: String(body.summary || ""),
+      summary: summaryText,
       status: body.status || "investigating",
       monitor_ids: validMonIds,
       affected_services: affected.length ? affected : ["Manual incident"],
@@ -3977,8 +4503,13 @@ welcome@pingava.com`;
   };
 
   const handleIncidentStatusUpdate = (req: Request, res: Response, inc: UnifiedIncident) => {
-    const { status, message } = req.body || {};
     const user = getUser(req);
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
+    if (!canUserAccessIncident(user, inc)) {
+      return res.status(403).json({ detail: "Access denied: incident belongs to another workspace." });
+    }
+
+    const { status, message } = req.body || {};
     inc.status = status || inc.status;
     if (status === "resolved") {
       inc.resolved_at = new Date().toISOString();
@@ -3995,15 +4526,24 @@ welcome@pingava.com`;
       created_at: new Date().toISOString()
     });
 
-    // Synchronize status update to simple incidents list
-    const isResolved = inc.status === "resolved";
+    // Synchronize status update to simple incidents list and reset monitor down state
+    const isResolved = inc.status === "resolved" || inc.status === "dismissed";
     for (const monId of (inc.monitor_ids || [])) {
+      const monIdNum = Number(monId);
       const simple = incidents.find(
-        i => Number(i.monitor_id) === Number(monId) && (i.id === inc.record_id || !i.resolved_at)
+        i => Number(i.monitor_id) === monIdNum && (i.id === inc.record_id || !i.resolved_at)
       );
       if (simple) {
         simple.status = inc.status;
         simple.resolved_at = inc.resolved_at;
+      }
+      if (isResolved) {
+        const mon = monitors.find(m => Number(m.id) === monIdNum);
+        if (mon && mon.status === "down") {
+          mon.status = "up";
+          mon.failure_streak = 0;
+          mon.recovery_streak = Math.max(1, Number(mon.recovery_threshold) || 1);
+        }
       }
     }
 
@@ -4028,11 +4568,25 @@ welcome@pingava.com`;
     handleIncidentStatusUpdate(req, res, inc);
   });
 
+  function canUserAccessIncident(user: User | null, inc: UnifiedIncident): boolean {
+    if (!user) return false;
+    if (user.is_owner) return true;
+    if (inc.user_id && inc.user_id === user.id) return true;
+    const userMonitors = monitors.filter(m => (m.user_id || 1) === user.id);
+    const userMonIds = new Set(userMonitors.map(m => Number(m.id)));
+    return inc.monitor_ids.some(id => userMonIds.has(Number(id)));
+  }
+
   // AI Root Cause Diagnostics endpoints
   app.get("/api/incidents/:id/diagnostic", async (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
     const id = req.params.id;
     const inc = unifiedIncidents.find(i => i.id === id || String(i.record_id) === id);
     if (!inc) return res.status(404).json({ detail: "Incident not found" });
+    if (!canUserAccessIncident(user, inc)) {
+      return res.status(403).json({ detail: "Access denied to this incident diagnostic." });
+    }
     if (!inc.ai_diagnostic) {
       inc.ai_diagnostic = await runDiagnosticForIncident(inc);
     }
@@ -4040,9 +4594,14 @@ welcome@pingava.com`;
   });
 
   app.post("/api/incidents/:id/diagnose", async (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
     const id = req.params.id;
     const inc = unifiedIncidents.find(i => i.id === id || String(i.record_id) === id);
     if (!inc) return res.status(404).json({ detail: "Incident not found" });
+    if (!canUserAccessIncident(user, inc)) {
+      return res.status(403).json({ detail: "Access denied to this incident diagnostic." });
+    }
     try {
       const diagnostic = await runDiagnosticForIncident(inc);
       res.json(diagnostic);
@@ -4052,10 +4611,15 @@ welcome@pingava.com`;
   });
 
   app.post("/api/incidents/:source/:record_id/diagnose", async (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
     const { source, record_id } = req.params;
     const inc = unifiedIncidents.find(i => i.source === source && i.record_id === Number(record_id)) ||
                 unifiedIncidents.find(i => i.id === record_id);
     if (!inc) return res.status(404).json({ detail: "Incident not found" });
+    if (!canUserAccessIncident(user, inc)) {
+      return res.status(403).json({ detail: "Access denied to this incident diagnostic." });
+    }
     try {
       const diagnostic = await runDiagnosticForIncident(inc);
       res.json(diagnostic);
@@ -4121,9 +4685,14 @@ welcome@pingava.com`;
 
   // Post-Mortem endpoints
   app.get("/api/incidents/:id/post-mortem", async (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
     const id = req.params.id;
     const inc = unifiedIncidents.find(i => i.id === id || String(i.record_id) === id);
     if (!inc) return res.status(404).json({ detail: "Incident not found" });
+    if (!canUserAccessIncident(user, inc)) {
+      return res.status(403).json({ detail: "Access denied to this post-mortem." });
+    }
     if (!inc.post_mortem) {
       inc.post_mortem = await runPostMortemForIncident(inc);
     }
@@ -4131,9 +4700,14 @@ welcome@pingava.com`;
   });
 
   app.post("/api/incidents/:id/post-mortem", async (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
     const id = req.params.id;
     const inc = unifiedIncidents.find(i => i.id === id || String(i.record_id) === id);
     if (!inc) return res.status(404).json({ detail: "Incident not found" });
+    if (!canUserAccessIncident(user, inc)) {
+      return res.status(403).json({ detail: "Access denied to this post-mortem." });
+    }
     try {
       const postMortem = await runPostMortemForIncident(inc);
       res.json(postMortem);
@@ -4143,10 +4717,15 @@ welcome@pingava.com`;
   });
 
   app.post("/api/incidents/:source/:record_id/post-mortem", async (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
     const { source, record_id } = req.params;
     const inc = unifiedIncidents.find(i => i.source === source && i.record_id === Number(record_id)) ||
                 unifiedIncidents.find(i => i.id === record_id);
     if (!inc) return res.status(404).json({ detail: "Incident not found" });
+    if (!canUserAccessIncident(user, inc)) {
+      return res.status(403).json({ detail: "Access denied to this post-mortem." });
+    }
     try {
       const postMortem = await runPostMortemForIncident(inc);
       res.json(postMortem);
@@ -4156,9 +4735,15 @@ welcome@pingava.com`;
   });
 
   app.post("/api/diagnostics/analyze", async (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
+
     const body = req.body || {};
     const monitorId = Number(body.monitor_id) || (body.incident_id ? unifiedIncidents.find(i => i.id === body.incident_id)?.monitor_ids[0] : null);
     const monitor = monitors.find(m => m.id === monitorId);
+    if (monitor && !user.is_owner && (monitor.user_id || 1) !== user.id) {
+      return res.status(403).json({ detail: "Access denied to specified monitor diagnostics." });
+    }
     const check = checks.find(c => c.id === Number(body.check_id)) ||
                   (monitorId ? checks.find(c => c.monitor_id === monitorId && !c.ok) || checks.find(c => c.monitor_id === monitorId) : checks[0]);
 
@@ -4194,6 +4779,7 @@ welcome@pingava.com`;
     const publicMonitors = monitors
       .filter(m => m.show_on_status_page)
       .sort((a, b) => (a.status_page_order || 0) - (b.status_page_order || 0));
+    const publicMonitorIds = new Set(publicMonitors.map(m => Number(m.id)));
 
     res.json({
       slug: statusPageConfig.slug,
@@ -4212,12 +4798,18 @@ welcome@pingava.com`;
         public_name: m.public_name,
         status_page_order: m.status_page_order
       })),
-      incidents: incidents.filter(i => i.status !== "dismissed"),
+      incidents: incidents.filter(i => i.status !== "dismissed" && publicMonitorIds.has(Number(i.monitor_id))),
       status_incidents: []
     });
   });
 
   app.put("/api/status-page", (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
+    if (!user.is_owner) {
+      return res.status(403).json({ detail: "Owner permissions required to configure status page." });
+    }
+
     const body = req.body || {};
     if (body.slug !== undefined) {
       const clean = String(body.slug).trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
@@ -4232,6 +4824,7 @@ welcome@pingava.com`;
     const publicMonitors = monitors
       .filter(m => m.show_on_status_page)
       .sort((a, b) => (a.status_page_order || 0) - (b.status_page_order || 0));
+    const publicMonitorIds = new Set(publicMonitors.map(m => Number(m.id)));
 
     res.json({
       slug: statusPageConfig.slug,
@@ -4250,18 +4843,29 @@ welcome@pingava.com`;
         public_name: m.public_name,
         status_page_order: m.status_page_order
       })),
-      incidents: incidents.filter(i => i.status !== "dismissed"),
+      incidents: incidents.filter(i => i.status !== "dismissed" && publicMonitorIds.has(Number(i.monitor_id))),
       status_incidents: []
     });
     syncStateToFirestore();
   });
 
   // Subscribers management endpoints
-  app.get("/api/status-subscribers", (_req, res) => {
+  app.get("/api/status-subscribers", (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
+    if (!user.is_owner) {
+      return res.status(403).json({ detail: "Owner permissions required to view subscriber list." });
+    }
     res.json(statusSubscribers);
   });
 
   app.post("/api/status-subscribers", (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
+    if (!user.is_owner) {
+      return res.status(403).json({ detail: "Owner permissions required to manage subscribers directly." });
+    }
+
     const email = String(req.body?.email || "").trim().toLowerCase();
     if (!email || !email.includes("@")) {
       return res.status(400).json({ detail: "Please provide a valid email address." });
@@ -4282,11 +4886,19 @@ welcome@pingava.com`;
       last_notified_at: null
     };
     statusSubscribers.unshift(newSub);
+    if (statusSubscribers.length > 1000) {
+      statusSubscribers.length = 1000;
+    }
     syncStateToFirestore();
     res.status(201).json(newSub);
   });
 
   app.delete("/api/status-subscribers/:id", (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
+    if (!user.is_owner) {
+      return res.status(403).json({ detail: "Owner permissions required to delete subscribers." });
+    }
     const id = Number(req.params.id);
     statusSubscribers = statusSubscribers.filter(s => s.id !== id);
     void deleteSubscriberFromSupabase(id);
@@ -4387,6 +4999,7 @@ welcome@pingava.com`;
     const publicMonitors = monitors
       .filter(m => m.show_on_status_page)
       .sort((a, b) => (a.status_page_order || 0) - (b.status_page_order || 0));
+    const publicMonitorIds = new Set(publicMonitors.map(m => Number(m.id)));
 
     res.json({
       slug: statusPageConfig.slug,
@@ -4405,14 +5018,15 @@ welcome@pingava.com`;
         public_name: m.public_name,
         status_page_order: m.status_page_order
       })),
-      incidents: incidents.filter(i => i.status !== "dismissed"),
+      incidents: incidents.filter(i => i.status !== "dismissed" && publicMonitorIds.has(Number(i.monitor_id))),
       status_incidents: []
     });
   });
 
-  app.post("/api/public/status/:slug/subscribe", (req, res) => {
+  app.post("/api/public/status/:slug/subscribe", statusSubscribeRateLimiter, (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
-    if (!email || !email.includes("@")) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || email.length > 254 || email.includes("..") || !emailRegex.test(email)) {
       return res.status(400).json({ detail: "Please provide a valid email address." });
     }
     const existing = statusSubscribers.find(s => s.email === email);
@@ -4436,6 +5050,25 @@ welcome@pingava.com`;
 
   app.get("/api/public/subscriptions/:action", (req, res) => {
     const action = req.params.action;
+    const token = String(req.query.token || "").trim();
+
+    if (token) {
+      const sub = statusSubscribers.find(s =>
+        s.email.toLowerCase() === token.toLowerCase() ||
+        String(s.id) === token ||
+        (crypto.createHmac('sha256', COOKIE_SECRET).update(`sub:${s.id}:${s.email}`).digest('hex').slice(0, 24) === token)
+      );
+      if (sub) {
+        if (action === "unsubscribe") {
+          sub.active = false;
+        } else if (action === "confirm") {
+          sub.confirmed = true;
+          sub.active = true;
+        }
+        syncStateToFirestore();
+      }
+    }
+
     res.json({
       message: action === "confirm" ? "Your email subscription has been confirmed." : "You have been unsubscribed from status updates."
     });
@@ -4449,13 +5082,24 @@ welcome@pingava.com`;
     res.json(userWebhooks);
   });
 
-  app.post("/api/webhooks", (req, res) => {
+  app.post("/api/webhooks", async (req, res) => {
     const user = getUser(req);
     if (!user) return res.status(401).json({ detail: "Not authenticated" });
     const body = req.body || {};
-    const url = String(body.url || "").trim();
+    let url = String(body.url || "").trim();
+    while (url.includes('api.telegram.org/bothttps://api.telegram.org/bot')) {
+      url = url.replace('api.telegram.org/bothttps://api.telegram.org/bot', 'api.telegram.org/bot');
+    }
+    while (url.includes('api.telegram.org/bothttp://api.telegram.org/bot')) {
+      url = url.replace('api.telegram.org/bothttp://api.telegram.org/bot', 'api.telegram.org/bot');
+    }
     if (!url || (!url.startsWith("https://") && !url.startsWith("http://"))) {
       return res.status(400).json({ detail: "A valid HTTPS webhook URL is required." });
+    }
+    try {
+      await validateSafeOutboundTarget(url);
+    } catch (valErr: any) {
+      return res.status(400).json({ detail: valErr.message || "Invalid or restricted webhook URL." });
     }
     const service = detectWebhookService(url);
     const masked = url.replace(/(https?:\/\/[^/]+\/).*/, "$1••••••••");
@@ -4463,6 +5107,8 @@ welcome@pingava.com`;
       ? "DevOps Slack Channel"
       : service === "discord"
       ? "Discord Incident Channel"
+      : service === "telegram"
+      ? "Telegram Phone Alerts"
       : "Custom Webhook Channel";
 
     const newWebhook: WebhookChannel = {
@@ -4527,10 +5173,16 @@ welcome@pingava.com`;
       url: "https://pingava.com",
       status: "up",
       uptime: 100,
-      check_interval_seconds: 60
+      interval_minutes: 5,
+      response_time: 45
     };
 
     const targetUrl = webhook.raw_url || webhook.masked_url;
+    try {
+      await validateSafeOutboundTarget(targetUrl);
+    } catch (valErr: any) {
+      return res.status(400).json({ detail: valErr.message || "Invalid or restricted webhook target URL." });
+    }
     const dispatchResult = await dispatchWebhook(
       targetUrl,
       {
@@ -4541,7 +5193,7 @@ welcome@pingava.com`;
           url: sampleMonitor.url,
           status: sampleMonitor.status,
           uptime: sampleMonitor.uptime,
-          check_interval_seconds: sampleMonitor.check_interval_seconds
+          check_interval_seconds: (sampleMonitor.interval_minutes || 5) * 60
         },
         incident: {
           timestamp: new Date().toISOString(),
@@ -4601,7 +5253,11 @@ welcome@pingava.com`;
 
   app.post("/api/alerts/test-email", async (req, res) => {
     const user = getUser(req);
-    const targetEmail = String(req.body?.email || user?.email || "avinash217k@gmail.com").trim();
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
+    const requestedEmail = req.body?.email ? String(req.body.email).trim().toLowerCase() : null;
+    // Only owner can send test alerts to arbitrary emails; standard users only send to their own verified email
+    const targetEmail = (user.is_owner && requestedEmail) ? requestedEmail : user.email;
+
     const result = await sendEmailAlert({
       to: targetEmail,
       subject: "Test Alert from Pingava Uptime Monitoring",
@@ -4628,6 +5284,9 @@ welcome@pingava.com`;
         created_at: new Date().toISOString(),
         sent_at: new Date().toISOString()
       });
+      if (alertDeliveries.length > 200) {
+        alertDeliveries.length = 200;
+      }
       syncStateToFirestore();
       res.json({ success: true, message: `Test email sent to ${targetEmail}` });
     } else {
@@ -4636,18 +5295,26 @@ welcome@pingava.com`;
   });
 
   // Public contact form inquiry endpoint
-  app.post("/api/contact", async (req, res) => {
+  app.post("/api/contact", contactRateLimiter, async (req, res) => {
     try {
+      // Honeypot spam trap: bots filling out hidden fields are silently accepted without sending emails
+      if (req.body?.website || req.body?._hp_check) {
+        return res.json({ success: true, message: "Thank you! Your inquiry has been received." });
+      }
+
       const email = String(req.body?.email || "").trim();
       const subject = String(req.body?.subject || "").trim();
       const message = String(req.body?.message || "").trim();
       const topic = String(req.body?.topic || "General Support").trim();
 
-      if (!email || !email.includes("@")) {
+      if (!email || !email.includes("@") || email.length > 254) {
         return res.status(400).json({ detail: "A valid work email address is required." });
       }
-      if (!message || message.length < 5) {
-        return res.status(400).json({ detail: "Please provide a descriptive message." });
+      if (!message || message.length < 5 || message.length > 5000) {
+        return res.status(400).json({ detail: "Please provide a descriptive message (between 5 and 5000 characters)." });
+      }
+      if (subject.length > 200) {
+        return res.status(400).json({ detail: "Subject line cannot exceed 200 characters." });
       }
 
       const ticketId = `PG-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -4746,20 +5413,33 @@ welcome@pingava.com`;
     res.json(safeUser);
   });
 
-  app.post("/api/me/password", (req, res) => {
+  app.post("/api/me/password", changePasswordRateLimiter, async (req, res) => {
     const user = getUser(req);
     if (!user) return res.status(401).json({ detail: "Not authenticated" });
 
     const currentPassword = String(req.body?.current_password || "");
     const newPassword = String(req.body?.new_password || "").trim();
+    const credential = req.body?.credential;
 
     if (!newPassword || newPassword.length < 8) {
       return res.status(400).json({ detail: "New password must be at least 8 characters long." });
     }
 
     // Verify current password if account already has a password set
-    if (user.password && !verifyPassword(currentPassword, user.password)) {
-      return res.status(400).json({ detail: "Current password is incorrect." });
+    if (user.password) {
+      if (!currentPassword || !verifyPassword(currentPassword, user.password)) {
+        return res.status(400).json({ detail: "Current password is incorrect." });
+      }
+    } else {
+      // If account was created via Google OAuth (no password set), require Google credential token for re-authentication
+      if (credential) {
+        const verifiedGoogle = await verifyGoogleIdToken(credential);
+        if (!verifiedGoogle || verifiedGoogle.email.toLowerCase() !== user.email.toLowerCase()) {
+          return res.status(401).json({ detail: "Google re-authentication failed." });
+        }
+      } else if (user.auth_provider === "google") {
+        return res.status(400).json({ detail: "Google account re-authentication required to set a password." });
+      }
     }
 
     user.password = hashPassword(newPassword);
@@ -4775,8 +5455,94 @@ welcome@pingava.com`;
     res.json({ message: "Password updated successfully. All other devices have been signed out." });
   });
 
-  app.post("/api/me/email-change", (_req, res) => {
-    res.json({ message: "Verification link sent to your new email address." });
+  app.post("/api/me/email-change", async (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
+
+    const newEmail = String(req.body?.new_email || "").trim().toLowerCase();
+    const currentPassword = String(req.body?.current_password || "");
+
+    if (!newEmail || !newEmail.includes("@") || newEmail.length > 254) {
+      return res.status(400).json({ detail: "Please provide a valid new email address." });
+    }
+
+    if (newEmail === user.email.toLowerCase()) {
+      return res.status(400).json({ detail: "The new email address is the same as your current email." });
+    }
+
+    if (users.some(u => u.id !== user.id && u.email.toLowerCase() === newEmail)) {
+      return res.status(400).json({ detail: "An account with this email address already exists." });
+    }
+
+    const credential = req.body?.credential;
+    if (user.password) {
+      if (!currentPassword || !verifyPassword(currentPassword, user.password)) {
+        return res.status(400).json({ detail: "Current password is incorrect." });
+      }
+    } else if (credential) {
+      const verifiedGoogle = await verifyGoogleIdToken(credential);
+      if (!verifiedGoogle || verifiedGoogle.email.toLowerCase() !== user.email.toLowerCase()) {
+        return res.status(401).json({ detail: "Google re-authentication failed." });
+      }
+    } else if (user.auth_provider === "google") {
+      return res.status(400).json({ detail: "Google account re-authentication required to change your email." });
+    }
+
+    const token = "emc_" + crypto.randomBytes(24).toString("hex");
+    pendingEmailChanges = pendingEmailChanges.filter(p => p.userId !== user.id && p.expiresAt > Date.now());
+    pendingEmailChanges.push({
+      userId: user.id,
+      currentEmail: user.email,
+      newEmail,
+      token,
+      expiresAt: Date.now() + 2 * 3600 * 1000 // 2 hours validity
+    });
+
+    const confirmBaseUrl = process.env.APP_URL || process.env.DASHBOARD_URL || "https://dashboard.pingava.com";
+    const confirmUrl = `${confirmBaseUrl}/email-change/confirm?token=${token}`;
+
+    const safeName = String(user.name || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const safeOldEmail = String(user.email).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const safeNewEmail = String(newEmail).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    // 1. Dispatch confirmation link to the requested new email
+    void sendEmailAlert({
+      to: newEmail,
+      subject: "[Pingava] Confirm your new email address",
+      text: `Hello ${user.name},\n\nA request was made to update your Pingava account email address to ${newEmail}.\n\nClick the link below to confirm this change (valid for 2 hours):\n${confirmUrl}\n\nIf you did not request this change, please ignore this email.\n\nBest regards,\nPingava Reliability Team`,
+      html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px; color: #1a202c;">
+        <h2 style="color: #0f766e; margin-top: 0;">Confirm your new email address</h2>
+        <p>Hello <strong>${safeName}</strong>,</p>
+        <p>A request was made to change your Pingava workspace email from <code>${safeOldEmail}</code> to <code>${safeNewEmail}</code>.</p>
+        <p>Click the button below to confirm this update (link valid for 2 hours):</p>
+        <div style="margin: 24px 0;">
+          <a href="${confirmUrl}" style="background: #0f766e; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; display: inline-block;">Confirm Email Change</a>
+        </div>
+        <p style="font-size: 13px; color: #64748b;">Or copy and paste this URL into your browser:<br/><a href="${confirmUrl}" style="color: #0f766e; word-break: break-all;">${confirmUrl}</a></p>
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+        <p style="font-size: 12px; color: #94a3b8;">If you did not request this change, please ignore this email.</p>
+      </div>`
+    }).catch(() => {});
+
+    // 2. Dispatch security notice to the current email address immediately
+    void sendEmailAlert({
+      to: user.email,
+      subject: "🚨 [Security Alert] Email change requested for your Pingava account",
+      text: `Hello ${user.name},\n\nA request was submitted to change your Pingava workspace email from ${user.email} to ${newEmail}.\n\nIf you initiated this change, please check your new inbox at ${newEmail} to confirm it.\n\nIf you did NOT request this, someone may have accessed your account. Please log in immediately and update your password or contact support at support@pingava.com.\n\nBest regards,\nPingava Security Team`,
+      html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #fed7aa; border-radius: 8px; color: #1a202c; background: #fffaf0;">
+        <h2 style="color: #c2410c; margin-top: 0;">🚨 Security Notice: Email Change Requested</h2>
+        <p>Hello <strong>${safeName}</strong>,</p>
+        <p>A request was recently submitted to change your Pingava account email address to <strong>${safeNewEmail}</strong>.</p>
+        <p>If you made this request, a confirmation link was sent to <strong>${safeNewEmail}</strong>.</p>
+        <div style="background: #ffffff; border: 1px solid #fdba74; padding: 14px; border-radius: 6px; font-size: 13px; color: #9a3412; margin: 16px 0;">
+          <strong>Didn't request this?</strong> If you did not make this change, please sign into your Pingava dashboard, update your password immediately, or contact <a href="mailto:support@pingava.com" style="color: #c2410c;">support@pingava.com</a>.
+        </div>
+        <hr style="border: none; border-top: 1px solid #fed7aa; margin: 20px 0;" />
+        <p style="font-size: 12px; color: #9a3412;">Pingava Security Team</p>
+      </div>`
+    }).catch(() => {});
+
+    res.json({ message: "Verification link sent to your new email address. Please check your inbox to confirm." });
   });
 
   app.delete("/api/me", (req, res) => {
@@ -4788,17 +5554,39 @@ welcome@pingava.com`;
       return res.status(403).json({ detail: "The primary root administrator account cannot be deleted." });
     }
 
+    // Security challenge: require current password if account has a password,
+    // or confirmation string "DELETE" if OAuth account
+    if (user.password) {
+      const confirmPassword = String(req.body?.current_password || req.body?.password || "");
+      if (!confirmPassword || !verifyPassword(confirmPassword, user.password)) {
+        return res.status(400).json({ detail: "Password verification required to delete your account." });
+      }
+    } else {
+      const confirmation = String(req.body?.confirmation || req.body?.confirm_text || "").trim().toUpperCase();
+      if (confirmation !== "DELETE") {
+        return res.status(400).json({ detail: "Type 'DELETE' to confirm permanent account deletion." });
+      }
+    }
+
     const userId = user.id;
     const userEmail = user.email.toLowerCase();
 
     // Identify user's monitors
     const userMonitors = monitors.filter(m => m.user_id === userId).map(m => m.id);
 
-    // Remove user monitors, checks, incidents, alert deliveries, and user record
+    // Complete cascade cleanup: remove monitors, checks, incidents, unified incidents, heartbeats, webhooks, alert deliveries, and user record
     monitors = monitors.filter(m => m.user_id !== userId);
     checks = checks.filter(c => !userMonitors.includes(c.monitor_id));
     incidents = incidents.filter(i => !userMonitors.includes(i.monitor_id));
-    alertDeliveries = alertDeliveries.filter(a => !userMonitors.includes(a.monitor_id) && a.recipient.toLowerCase() !== userEmail);
+    unifiedIncidents = unifiedIncidents.filter(i => i.user_id !== userId && !i.monitor_ids.some(mid => userMonitors.includes(mid)));
+    
+    const userHeartbeatIds = heartbeats.filter(h => (h.user_id || 1) === userId).map(h => h.id);
+    heartbeats = heartbeats.filter(h => (h.user_id || 1) !== userId);
+    heartbeatPings = heartbeatPings.filter(p => !userHeartbeatIds.includes(p.heartbeat_id));
+    
+    webhooks = webhooks.filter(w => (w.user_id || 1) !== userId);
+    pendingEmailChanges = pendingEmailChanges.filter(p => p.userId !== userId);
+    alertDeliveries = alertDeliveries.filter(a => !(a.monitor_id !== null && userMonitors.includes(a.monitor_id)) && a.recipient.toLowerCase() !== userEmail);
     users = users.filter(u => u.id !== userId && u.email.toLowerCase() !== userEmail);
     void deleteUserFromSupabase(userId);
     syncStateToFirestore();
@@ -4988,6 +5776,41 @@ welcome@pingava.com`;
     res.status(404).json({ error: "API route not found" });
   });
 
+  // Task 1: Public robots.txt and sitemap.xml routes with full crawler support, CORS and caching
+  app.all(["/robots.txt", "/robots.txt/"], (req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+    res.setHeader("X-Robots-Tag", "index, follow, all");
+
+    if (req.method === "OPTIONS") return res.status(204).end();
+    if (req.method === "HEAD") return res.status(200).end();
+
+    const robotsPath = path.join(process.cwd(), "public", "robots.txt");
+    if (fs.existsSync(robotsPath)) {
+      return res.sendFile(robotsPath);
+    }
+    return res.send("User-agent: *\nAllow: /\nAllow: /pricing\nAllow: /features\nAllow: /docs\nAllow: /blog\nAllow: /status\nAllow: /status/*\nAllow: /demo\nDisallow: /dashboard/\nDisallow: /dashboard/*\nDisallow: /app/\nDisallow: /app/*\nDisallow: /api/\nDisallow: /api/*\nDisallow: /settings/\nDisallow: /settings/*\n\nSitemap: https://www.pingava.com/sitemap.xml\n");
+  });
+
+  app.all(["/sitemap.xml", "/sitemap.xml/"], (req: Request, res: Response) => {
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+    res.setHeader("X-Robots-Tag", "index, follow, all");
+
+    if (req.method === "OPTIONS") return res.status(204).end();
+    if (req.method === "HEAD") return res.status(200).end();
+
+    const sitemapPath = path.join(process.cwd(), "public", "sitemap.xml");
+    if (fs.existsSync(sitemapPath)) {
+      return res.sendFile(sitemapPath);
+    }
+    return res.status(404).end();
+  });
+
   // Vite middleware for development or static serving for production
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
@@ -4995,6 +5818,27 @@ welcome@pingava.com`;
       server: { middlewareMode: true, host: "0.0.0.0", port: 3000 },
       appType: "spa"
     });
+
+    // For crawlers or direct curl unfurls in dev, serve pre-rendered semantic HTML
+    app.use(async (req, res, next) => {
+      const ua = req.headers["user-agent"] || "";
+      const isCrawler = /bot|crawl|spider|slurp|facebookexternalhit|twitterbot|linkedinbot|embedly|quora link preview|outbrain|pinterest/i.test(ua) || (isPublicPagePath(req.path) && req.headers["accept"] === "text/plain");
+      if (isCrawler && isPublicPagePath(req.path)) {
+        const indexPath = path.join(process.cwd(), "index.html");
+        if (fs.existsSync(indexPath)) {
+          let html = fs.readFileSync(indexPath, "utf8");
+          html = await vite.transformIndexHtml(req.url, html);
+          html = injectPublicPageIntoHtml(html, req.path);
+          res.setHeader("Content-Type", "text/html; charset=utf-8");
+          res.setHeader("X-Robots-Tag", "index, follow, all");
+          res.setHeader("Access-Control-Allow-Origin", "*");
+          res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+          return res.send(html);
+        }
+      }
+      next();
+    });
+
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
@@ -5008,7 +5852,7 @@ welcome@pingava.com`;
         res.status(404).end();
       }
     });
-    app.get("*all", (_req, res) => {
+    app.get("*all", (req, res) => {
       const indexPath = path.join(distPath, "index.html");
       if (!fs.existsSync(indexPath)) {
         return res.status(404).send("Not found");
@@ -5028,6 +5872,21 @@ welcome@pingava.com`;
 
       html = html.replace(/<meta\s+name="pingava-analytics-[^"]*"\s+content="[^"]*"\s*\/?>\n?/gi, "");
       html = html.replace("</head>", `  ${metaTags}\n  </head>`);
+
+      // Task 1: SSR / Pre-rendered semantic HTML for public marketing pages
+      if (isPublicPagePath(req.path)) {
+        html = injectPublicPageIntoHtml(html, req.path);
+        res.setHeader("X-Robots-Tag", "index, follow, all");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+      } else if (
+        req.path.startsWith("/dashboard") ||
+        req.path.startsWith("/app") ||
+        req.path.startsWith("/settings") ||
+        req.path.startsWith("/api")
+      ) {
+        res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
+      }
 
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.send(html);

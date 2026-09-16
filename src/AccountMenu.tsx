@@ -3,6 +3,7 @@ import { Bell, ChevronDown, CreditCard, ExternalLink, LogOut, Settings } from 'l
 import type { User } from './api'
 import type { SettingsTab } from './AccountSettings'
 import { UserAvatar } from './UserAvatar'
+import { publicHref } from './appConfig'
 
 export function AccountMenu({ user, onSettings, onLogout }: { user: User; onSettings: (tab: SettingsTab) => void; onLogout: () => void }) {
   const [open, setOpen] = useState(false)
@@ -28,7 +29,7 @@ export function AccountMenu({ user, onSettings, onLogout }: { user: User; onSett
   }
   const navigate = (tab: SettingsTab) => { setOpen(false); onSettings(tab) }
   return <div className="account-menu-wrap" ref={root}>
-    {open && <div className="account-popover" role="menu" aria-label="Account menu" onKeyDown={moveFocus}><header><UserAvatar user={user} size="medium" /><div><strong>{user.name}</strong><small>{user.email}</small><span style={{ textTransform: 'capitalize' }}>{user.plan ? `${user.plan} plan` : 'Pro plan'}</span></div></header><div className="account-popover-links"><button ref={firstItem} role="menuitem" onClick={() => navigate('profile')}><Settings size={16} />Account settings</button><button role="menuitem" onClick={() => navigate('notifications')}><Bell size={16} />Notification preferences</button><button role="menuitem" onClick={() => navigate('billing')}><CreditCard size={16} />Plan &amp; billing</button><a className="account-popover-link" role="menuitem" href="/marketing" title="View public product site"><ExternalLink size={16} />Public site</a></div><button className="account-signout" role="menuitem" onClick={() => { setOpen(false); onLogout() }}><LogOut size={16} />Sign out</button></div>}
+    {open && <div className="account-popover" role="menu" aria-label="Account menu" onKeyDown={moveFocus}><header><UserAvatar user={user} size="medium" /><div><strong>{user.name}</strong><small>{user.email}</small><span style={{ textTransform: 'capitalize' }}>{user.plan ? `${user.plan} plan` : 'Pro plan'}</span></div></header><div className="account-popover-links"><button ref={firstItem} role="menuitem" onClick={() => navigate('profile')}><Settings size={16} />Account settings</button><button role="menuitem" onClick={() => navigate('notifications')}><Bell size={16} />Notification preferences</button><button role="menuitem" onClick={() => navigate('billing')}><CreditCard size={16} />Plan &amp; billing</button><a className="account-popover-link" role="menuitem" href={publicHref('/')} target="_blank" rel="noopener noreferrer" title="View public product site"><ExternalLink size={16} />Public site</a></div><button className="account-signout" role="menuitem" onClick={() => { setOpen(false); onLogout() }}><LogOut size={16} />Sign out</button></div>}
     <button className="account" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)}><UserAvatar user={user} size="small" /><div><strong>{user.name}</strong><small>{user.email}</small></div><ChevronDown size={16} className={open ? 'open' : ''} /></button>
   </div>
 }

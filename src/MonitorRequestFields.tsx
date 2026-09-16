@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AlertTriangle, Braces, ChevronDown, KeyRound, ListPlus, PlayCircle, Plus, RefreshCw, Trash2 } from 'lucide-react'
-import type { Monitor } from './api'
+import { normalizeEndpointUrl, type Monitor } from './api'
 
 type Pair = { id: number; key: string; value: string }
 let nextPairId = 1
@@ -36,7 +36,7 @@ export function MonitorRequestFields({ monitor, guided = false }: { monitor?: Mo
   return <>
     <div className="request-url-grid">
       <label>HTTP method<select name="http_method" value={method} onChange={(event) => { const next = event.target.value as Monitor['http_method']; const nextUnsafe = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(next); setMethod(next); setAcknowledged(false); setExecutionMode(nextUnsafe ? 'manual' : 'recurring'); setInterval(nextUnsafe ? 30 : 5); if (guided && ['POST', 'PUT', 'PATCH'].includes(next)) setRequestTab('Body') }}><option>GET</option><option>HEAD</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option></select></label>
-      <label>Public URL<input name="url" type="url" required defaultValue={monitor?.url} placeholder="https://api.example.com/health" /></label>
+      <label>Public URL<input name="url" type="text" inputMode="url" autoCapitalize="none" autoCorrect="off" required defaultValue={monitor?.url} placeholder="https://api.example.com/health" onBlur={(e) => { if (e.target.value.trim()) e.target.value = normalizeEndpointUrl(e.target.value) }} /></label>
     </div>
     <details className="request-options" open={configured || method !== 'GET'}>
       <summary><span><ListPlus size={16} /><span><strong>Request configuration</strong><small>Headers, query parameters, and an optional JSON body</small></span></span><ChevronDown size={16} /></summary>

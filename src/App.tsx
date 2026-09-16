@@ -4,7 +4,7 @@ import {
   Eye, EyeOff, Gauge, HeartPulse, LayoutDashboard, LogOut, Pencil, Pause, Play, Plus, Radio, Radar, RefreshCw,
   Link2, LockKeyhole, Moon, ScanText, Search, Send, Settings, ShieldAlert, ShieldCheck, Sun, Trash2, TriangleAlert, Webhook, X, Zap,
 } from 'lucide-react'
-import { api, session, userFacingError, type AlertDelivery, type Dashboard, type Monitor, type MonitorDetail as MonitorDetailData, type User, type WebhookChannel, type WebhookDelivery } from './api'
+import { api, normalizeEndpointUrl, session, userFacingError, type AlertDelivery, type Dashboard, type Monitor, type MonitorDetail as MonitorDetailData, type User, type WebhookChannel, type WebhookDelivery } from './api'
 import './App.css'
 import { PublicStatusPage, StatusPageSettings } from './StatusPages'
 import { AccountSettings, type SettingsTab } from './AccountSettings'
@@ -32,6 +32,7 @@ import { CronHeartbeatManager } from './CronHeartbeatManager'
 import { AddMonitor } from './AddMonitor'
 import { PrivacyPage, TermsPage } from './LegalPages'
 import { PingavaObservability } from './PingavaObservability'
+import { DemoDashboard } from './DemoDashboard'
 
 type View = 'overview' | 'monitors' | 'heartbeats' | 'radar' | 'edge' | 'incidents' | 'status' | 'alerts' | 'settings' | 'admin' | 'observability'
 const nav = [
@@ -90,6 +91,13 @@ function AuthScreen({ onAuth, initialMode = 'login' }: { onAuth: (user: User) =>
   const [googleClientId, setGoogleClientId] = useState<string>(
     () => "617326161009-qmjsi9aanmsa73e2qa0i4js0ak6l4fg3.apps.googleusercontent.com"
   )
+  const queryTargetUrl = typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('url') || '') : ''
+
+  useEffect(() => {
+    if (queryTargetUrl) {
+      sessionStorage.setItem('pending_monitor_url', queryTargetUrl)
+    }
+  }, [queryTargetUrl])
 
   useEffect(() => {
     api<{ googleClientId: string }>('/auth/config')
@@ -198,7 +206,7 @@ function AuthScreen({ onAuth, initialMode = 'login' }: { onAuth: (user: User) =>
 
   if (verificationEmail) return <div className="auth-page"><PageMetadata /><section className="auth-brand"><BrandLockup /><div className="auth-message"><p>ONE QUICK STEP</p><h1>Your workspace is almost ready.</h1><span>Confirm your email, then Pingava can start watching the services that matter.</span></div></section><section className="auth-form-wrap"><div className="auth-form auth-confirmation"><CheckCircle2 size={34} /><div><h2>Check your inbox</h2><p>We sent a verification link to <strong>{verificationEmail}</strong>. It expires in 30 minutes.</p></div><button className="secondary-btn" disabled={loading} onClick={async () => { setLoading(true); setError(''); try { const result = await api<{ message: string }>('/auth/resend-verification', { method: 'POST', body: JSON.stringify({ email: verificationEmail }) }); setError(result.message) } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not resend verification') } finally { setLoading(false) } }}>{loading ? 'Sending...' : 'Resend verification email'}</button>{error && <div className="form-note">{error}</div>}<a href="/login" className="auth-switch">Return to sign in</a></div></section></div>
 
-  return <div className="auth-page"><PageMetadata /><section className="auth-brand"><BrandLockup /><div className="auth-message"><p>WEBSITE &amp; API MONITORING</p><h1>Know before your users do.</h1><span>Monitor uptime, APIs and performance. Get alerted the moment something breaks.</span></div><div className="monitor-preview" aria-label="Live monitoring preview"><div className="monitor-preview-head"><span>Live services</span><strong><i />All operational</strong></div>{previewServices.map(([name, responseTime]) => <div className="monitor-preview-row" key={name}><i /><strong>{name}</strong><span>Operational</span><b>{responseTime}</b></div>)}</div></section><section className="auth-form-wrap"><form className="auth-form" onSubmit={submit} noValidate={mode === 'register'}><div><h2>{mode === 'register' ? 'Create your workspace' : mode === 'forgot' ? 'Reset your password' : 'Welcome back'}</h2><p>{mode === 'register' ? 'Start monitoring your first website or API in under 2 minutes.' : mode === 'forgot' ? 'We will email you a secure reset link.' : 'Sign in to view your monitors.'}</p></div>{googleClientId && mode !== 'forgot' && <><div className="google-signin" ref={googleButton} /><div className="auth-divider"><span>or continue with email</span></div></>}{mode === 'register' && <label htmlFor="auth-name">Full name<input id="auth-name" name="name" required minLength={2} maxLength={80} autoComplete="name" placeholder="Your full name" aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? 'name-error' : undefined} onChange={() => clearFieldError('name')} />{fieldErrors.name && <small className="field-error" id="name-error">{fieldErrors.name}</small>}</label>}<label htmlFor="auth-email">Email address<input id="auth-email" name="email" type="email" required autoComplete="email" placeholder="you@company.com" aria-invalid={Boolean(fieldErrors.email)} aria-describedby={fieldErrors.email ? 'email-error' : undefined} onChange={() => clearFieldError('email')} />{fieldErrors.email && <small className="field-error" id="email-error">{fieldErrors.email}</small>}</label>{mode !== 'forgot' && passwordField('password', 'Password', 'At least 8 characters', showPassword, () => setShowPassword((value) => !value))}{mode === 'register' && <>{passwordField('confirm_password', 'Confirm password', 'Re-enter your password', showConfirmation, () => setShowConfirmation((value) => !value))}<label className="terms-consent"><input name="terms" type="checkbox" aria-invalid={Boolean(fieldErrors.terms)} aria-describedby={fieldErrors.terms ? 'terms-error' : undefined} onChange={() => clearFieldError('terms')} /><span>I agree to the <a href="/terms-of-service">Terms of Service</a> and <a href="/privacy-policy">Privacy Policy</a></span>{fieldErrors.terms && <small className="field-error" id="terms-error">{fieldErrors.terms}</small>}</label></>}{notice && <div className="form-note">{notice}</div>}{error && <div className="form-error">{error}</div>}<button className="primary-btn auth-submit" disabled={loading}>{loading ? 'Please wait...' : mode === 'register' ? 'Create free account \u2192' : mode === 'forgot' ? 'Send reset link' : 'Sign in'}</button>{mode === 'register' && <p className="auth-reassurance">No credit card required</p>}{mode === 'login' && <button type="button" className="auth-switch" onClick={() => { setMode('forgot'); setError(''); setNotice(''); setFieldErrors({}) }}>Forgot password?</button>}<button type="button" className="auth-switch" onClick={() => { setMode(mode === 'register' ? 'login' : mode === 'login' ? 'register' : 'login'); setError(''); setNotice(''); setFieldErrors({}) }}>{mode === 'register' ? 'Already have an account? Sign in' : mode === 'forgot' ? 'Back to sign in' : 'New to Pingava? Create an account'}</button></form></section></div>
+  return <div className="auth-page"><PageMetadata /><section className="auth-brand"><BrandLockup /><div className="auth-message"><p>WEBSITE &amp; API MONITORING</p><h1>Know before your users do.</h1><span>Monitor uptime, APIs and performance. Get alerted the moment something breaks.</span></div><div className="monitor-preview" aria-label="Live monitoring preview"><div className="monitor-preview-head"><span>Live services</span><strong><i />All operational</strong></div>{previewServices.map(([name, responseTime]) => <div className="monitor-preview-row" key={name}><i /><strong>{name}</strong><span>Operational</span><b>{responseTime}</b></div>)}</div></section><section className="auth-form-wrap"><form className="auth-form" onSubmit={submit} noValidate={mode === 'register'}><div><h2>{mode === 'register' ? 'Create your workspace' : mode === 'forgot' ? 'Reset your password' : 'Welcome back'}</h2><p>{mode === 'register' ? 'Start monitoring your first website or API in under 2 minutes.' : mode === 'forgot' ? 'We will email you a secure reset link.' : 'Sign in to view your monitors.'}</p></div>{mode === 'register' && queryTargetUrl && <div style={{ background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '8px', padding: '0.65rem 0.9rem', marginBottom: '1rem', fontSize: '0.84rem', color: '#7dd3fc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Zap size={15} color="#38bdf8" /><span>Target endpoint: <strong style={{ color: '#f8fafc' }}>{queryTargetUrl}</strong></span></div>}{googleClientId && mode !== 'forgot' && <><div className="google-signin" ref={googleButton} /><div className="auth-divider"><span>or continue with email</span></div></>}{mode === 'register' && <label htmlFor="auth-name">Full name<input id="auth-name" name="name" required minLength={2} maxLength={80} autoComplete="name" placeholder="Your full name" aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? 'name-error' : undefined} onChange={() => clearFieldError('name')} />{fieldErrors.name && <small className="field-error" id="name-error">{fieldErrors.name}</small>}</label>}<label htmlFor="auth-email">Email address<input id="auth-email" name="email" type="email" required autoComplete="email" placeholder="you@company.com" aria-invalid={Boolean(fieldErrors.email)} aria-describedby={fieldErrors.email ? 'email-error' : undefined} onChange={() => clearFieldError('email')} />{fieldErrors.email && <small className="field-error" id="email-error">{fieldErrors.email}</small>}</label>{mode !== 'forgot' && passwordField('password', 'Password', 'At least 8 characters', showPassword, () => setShowPassword((value) => !value))}{mode === 'register' && <>{passwordField('confirm_password', 'Confirm password', 'Re-enter your password', showConfirmation, () => setShowConfirmation((value) => !value))}<label className="terms-consent"><input name="terms" type="checkbox" aria-invalid={Boolean(fieldErrors.terms)} aria-describedby={fieldErrors.terms ? 'terms-error' : undefined} onChange={() => clearFieldError('terms')} /><span>I agree to the <a href="/terms-of-service">Terms of Service</a> and <a href="/privacy-policy">Privacy Policy</a></span>{fieldErrors.terms && <small className="field-error" id="terms-error">{fieldErrors.terms}</small>}</label></>}{notice && <div className="form-note">{notice}</div>}{error && <div className="form-error">{error}</div>}<button className="primary-btn auth-submit" disabled={loading}>{loading ? 'Please wait...' : mode === 'register' ? 'Create free account \u2192' : mode === 'forgot' ? 'Send reset link' : 'Sign in'}</button>{mode === 'register' && <p className="auth-reassurance">No credit card required</p>}{mode === 'login' && <button type="button" className="auth-switch" onClick={() => { setMode('forgot'); setError(''); setNotice(''); setFieldErrors({}) }}>Forgot password?</button>}<button type="button" className="auth-switch" onClick={() => { setMode(mode === 'register' ? 'login' : mode === 'login' ? 'register' : 'login'); setError(''); setNotice(''); setFieldErrors({}) }}>{mode === 'register' ? 'Already have an account? Sign in' : mode === 'forgot' ? 'Back to sign in' : 'New to Pingava? Create an account'}</button></form></section></div>
 }
 
 function NotFoundPage({ title }: { title: string }) {
@@ -482,6 +490,8 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
     ? 'slack'
     : inputUrl.includes('discord.com/api/webhooks/') || inputUrl.includes('discordapp.com/api/webhooks/')
     ? 'discord'
+    : inputUrl.includes('api.telegram.org')
+    ? 'telegram'
     : inputUrl.startsWith('https://')
     ? 'generic'
     : null;
@@ -503,13 +513,16 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
     return () => { document.removeEventListener('keydown', handleKey); trigger?.focus() }
   }, [showForm])
 
-  const applyPreset = (type: 'slack' | 'discord' | 'generic') => {
+  const applyPreset = (type: 'slack' | 'discord' | 'telegram' | 'generic') => {
     if (type === 'slack') {
       setDefaultName('DevOps Slack Alerts');
       setInputUrl('https://hooks.slack.com/services/');
     } else if (type === 'discord') {
       setDefaultName('Discord Incident Alerts');
       setInputUrl('https://discord.com/api/webhooks/');
+    } else if (type === 'telegram') {
+      setDefaultName('Telegram Phone Alerts');
+      setInputUrl('https://api.telegram.org/bot<BOT_TOKEN>/sendMessage?chat_id=<CHAT_ID>');
     } else {
       setDefaultName('Custom Operations Webhook');
       setInputUrl('https://');
@@ -521,11 +534,27 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     const name = String(form.get('name') || defaultName || '').trim()
-    const url = String(form.get('url') || inputUrl).trim()
+    let url = String(form.get('url') || inputUrl).trim()
+    while (url.includes('api.telegram.org/bothttps://api.telegram.org/bot')) {
+      url = url.replace('api.telegram.org/bothttps://api.telegram.org/bot', 'api.telegram.org/bot')
+    }
+    while (url.includes('api.telegram.org/bothttp://api.telegram.org/bot')) {
+      url = url.replace('api.telegram.org/bothttp://api.telegram.org/bot', 'api.telegram.org/bot')
+    }
     const eventsSelected = ['down', 'recovery', 'ssl'].some((field) => form.get(field) === 'on')
     const errors: { name?: string; url?: string; events?: string } = {}
     if (!name) errors.name = 'Enter a webhook name.'
-    try { if (!url || new URL(url).protocol !== 'https:') errors.url = 'Enter a valid HTTPS webhook URL.' } catch { errors.url = 'Enter a valid HTTPS webhook URL.' }
+    try {
+      if (!url || new URL(url).protocol !== 'https:') {
+        errors.url = 'Enter a valid HTTPS webhook URL.'
+      } else if (url.includes('<BOT_TOKEN>') || url.includes('<CHAT_ID>')) {
+        errors.url = 'Replace <BOT_TOKEN> and <CHAT_ID> with your actual bot API token and chat ID.'
+      } else if (url.includes('api.telegram.org') && !url.includes('chat_id')) {
+        errors.url = 'Telegram webhook URL requires a ?chat_id=<CHAT_ID> query parameter.'
+      }
+    } catch {
+      errors.url = 'Enter a valid HTTPS webhook URL.'
+    }
     if (!eventsSelected) errors.events = 'Select at least one event.'
     setFormErrors(errors)
     if (Object.keys(errors).length) return
@@ -559,8 +588,8 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
     <section className="monitors-section webhook-section">
       <div className="section-title">
         <div>
-          <h2>Alert Channels (Slack, Discord & Webhooks)</h2>
-          <p>Real-time outbound incident notifications to your engineering chat and custom HTTPS endpoints</p>
+          <h2>Alert Channels (Telegram, Slack, Discord &amp; Webhooks)</h2>
+          <p>Real-time outbound incident notifications to Telegram, Slack, Discord, and custom HTTPS endpoints</p>
         </div>
         <button ref={addButtonRef} className="primary-btn" onClick={() => { setFormErrors({}); setInputUrl(''); setDefaultName(''); setShowForm(true) }}>
           <Plus size={15} />Add alert channel
@@ -571,10 +600,11 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
         {webhooks.map((webhook) => {
           const isSlack = webhook.channel_type === 'slack' || webhook.name.toLowerCase().includes('slack') || webhook.masked_url.includes('slack');
           const isDiscord = webhook.channel_type === 'discord' || webhook.name.toLowerCase().includes('discord') || webhook.masked_url.includes('discord');
+          const isTelegram = webhook.channel_type === 'telegram' || webhook.name.toLowerCase().includes('telegram') || webhook.masked_url.includes('telegram');
           return (
             <article key={webhook.id}>
               <div className="webhook-identity">
-                <span style={{ background: isSlack ? '#f0f9ff' : isDiscord ? '#f5f3ff' : '#ecfdf3', color: isSlack ? '#0284c7' : isDiscord ? '#7c3aed' : '#087a63' }}>
+                <span style={{ background: isSlack ? '#f0f9ff' : isDiscord ? '#f5f3ff' : isTelegram ? '#e0f2fe' : '#ecfdf3', color: isSlack ? '#0284c7' : isDiscord ? '#7c3aed' : isTelegram ? '#0284c7' : '#087a63' }}>
                   <Webhook size={17} />
                 </span>
                 <div>
@@ -584,6 +614,8 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
                       <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#e0f2fe', color: '#0369a1', fontWeight: 700 }}>Slack</span>
                     ) : isDiscord ? (
                       <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#ede9fe', color: '#6d28d9', fontWeight: 700 }}>Discord</span>
+                    ) : isTelegram ? (
+                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#e0f2fe', color: '#0284c7', fontWeight: 700 }}>Telegram</span>
                     ) : (
                       <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#f1f5f9', color: '#475569', fontWeight: 700 }}>Webhook</span>
                     )}
@@ -623,7 +655,7 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
           <div className="empty-state">
             <Webhook size={24} />
             <strong>No alert channels configured</strong>
-            <span>Connect a Slack Incoming Webhook, Discord Channel, or custom HTTPS URL to receive instant incident dispatches.</span>
+            <span>Connect Telegram phone alerts, Slack Incoming Webhooks, Discord Channels, or custom HTTPS URLs to receive instant incident dispatches.</span>
           </div>
         )}
       </div>
@@ -680,7 +712,7 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
             <span className="modal-icon"><Webhook size={19} /></span>
             <div>
               <h2 id="webhook-dialog-title">Connect Alert Channel</h2>
-              <p>Dispatch real-time downtime &amp; recovery alerts to Slack, Discord, or HTTPS webhooks.</p>
+              <p>Dispatch real-time downtime &amp; recovery alerts to Telegram, Slack, Discord, or HTTPS webhooks.</p>
             </div>
             <button type="button" className="icon-btn" aria-label="Close dialog" disabled={submitting} onClick={() => setShowForm(false)}>
               <X size={18} />
@@ -690,6 +722,13 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
             <div style={{ marginBottom: 12 }}>
               <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 700, color: '#475569' }}>Quick Presets</p>
               <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => applyPreset('telegram')}
+                  style={{ flex: 1, padding: '6px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #7dd3fc', background: '#f0f9ff', color: '#0284c7', cursor: 'pointer' }}
+                >
+                  ✈️ Telegram
+                </button>
                 <button
                   type="button"
                   onClick={() => applyPreset('slack')}
@@ -720,7 +759,7 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
                 name="name"
                 maxLength={80}
                 value={defaultName}
-                placeholder="e.g. #ops-incidents, DevOps Slack, PagerDuty"
+                placeholder="e.g. Telegram Phone Alerts, #ops-incidents, DevOps Slack"
                 aria-invalid={Boolean(formErrors.name)}
                 aria-describedby={formErrors.name ? 'webhook-name-error' : undefined}
                 onChange={(e) => { setDefaultName(e.target.value); setFormErrors((value) => ({ ...value, name: undefined })) }}
@@ -736,12 +775,31 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
                   name="url"
                   type="url"
                   value={inputUrl}
-                  placeholder="https://hooks.slack.com/services/... or https://discord.com/api/webhooks/..."
+                  placeholder="https://api.telegram.org/bot... or https://hooks.slack.com/... or https://discord.com/..."
                   aria-invalid={Boolean(formErrors.url)}
-                  aria-describedby="webhook-url-help webhook-url-error"
-                  onChange={(e) => { setInputUrl(e.target.value); setFormErrors((value) => ({ ...value, url: undefined })) }}
+                  onChange={(e) => {
+                    let val = e.target.value;
+                    while (val.includes('api.telegram.org/bothttps://api.telegram.org/bot')) {
+                      val = val.replace('api.telegram.org/bothttps://api.telegram.org/bot', 'api.telegram.org/bot');
+                    }
+                    while (val.includes('api.telegram.org/bothttp://api.telegram.org/bot')) {
+                      val = val.replace('api.telegram.org/bothttp://api.telegram.org/bot', 'api.telegram.org/bot');
+                    }
+                    setInputUrl(val);
+                    setFormErrors((value) => ({ ...value, url: undefined }));
+                  }}
                 />
               </span>
+              {detectedService === 'telegram' && (
+                <div style={{ color: '#0369a1', fontSize: 12, marginTop: 6, lineHeight: 1.4, background: '#f0f9ff', padding: '8px 10px', borderRadius: 6, border: '1px solid #bae6fd' }}>
+                  <strong>✈️ Telegram Setup Guide (100% Free):</strong>
+                  <ol style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+                    <li>Open Telegram and message <code>@BotFather</code>, send <code>/newbot</code> to get your <strong>Bot API Token</strong>.</li>
+                    <li>Message <code>@userinfobot</code> to get your numeric <strong>Chat ID</strong>.</li>
+                    <li>Replace <code>&lt;BOT_TOKEN&gt;</code> and <code>&lt;CHAT_ID&gt;</code> in the URL above.</li>
+                  </ol>
+                </div>
+              )}
               {detectedService === 'slack' && (
                 <small style={{ color: '#0284c7', fontWeight: 600, display: 'block', marginTop: 4 }}>
                   ⚡ Slack Webhook detected • Pingava will dispatch rich Block Kit cards with color status.
@@ -924,9 +982,10 @@ function DashboardApp({ initialAuthMode = 'login' }: { initialAuthMode?: 'login'
   const addMonitor = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setError('')
     const form = new FormData(event.currentTarget)
+    const normalizedUrl = normalizeEndpointUrl(String(form.get('url') || ''))
     try {
-      await api('/monitors', { method: 'POST', body: JSON.stringify({ name: form.get('name'), url: form.get('url'), interval_minutes: Number(form.get('interval')), timeout_seconds: Number(form.get('timeout')), accepted_statuses: form.get('statuses'), failure_threshold: Number(form.get('failure_threshold')), recovery_threshold: Number(form.get('recovery_threshold')), ...monitorRequestPayload(form), ...responseRulesPayload(form) }) })
-      const monitorUrl = new URL(String(form.get('url')))
+      await api('/monitors', { method: 'POST', body: JSON.stringify({ name: form.get('name'), url: normalizedUrl, interval_minutes: Number(form.get('interval')), timeout_seconds: Number(form.get('timeout')), accepted_statuses: form.get('statuses'), failure_threshold: Number(form.get('failure_threshold')), recovery_threshold: Number(form.get('recovery_threshold')), ...monitorRequestPayload(form), ...responseRulesPayload(form) }) })
+      const monitorUrl = new URL(normalizedUrl)
       trackEvent('monitor_created', { monitor_type: 'http', interval: Number(form.get('interval')), protocol: monitorUrl.protocol.replace(':', '') })
       setShowAdd(false); setToast('Monitor created and first check started'); await loadDashboard()
     } catch (reason) { setError(userFacingError(reason, 'Monitor creation failed. Check the configuration and try again.')) }
@@ -956,8 +1015,9 @@ function DashboardApp({ initialAuthMode = 'login' }: { initialAuthMode?: 'login'
     event.preventDefault()
     if (!editingMonitor) return
     const form = new FormData(event.currentTarget)
+    const normalizedUrl = normalizeEndpointUrl(String(form.get('url') || ''))
     try {
-      await api(`/monitors/${editingMonitor.id}`, { method: 'PATCH', body: JSON.stringify({ name: form.get('name'), url: form.get('url'), interval_minutes: Number(form.get('interval')), timeout_seconds: Number(form.get('timeout')), accepted_statuses: form.get('statuses'), failure_threshold: Number(form.get('failure_threshold')), recovery_threshold: Number(form.get('recovery_threshold')), ...monitorRequestPayload(form), ...responseRulesPayload(form) }) })
+      await api(`/monitors/${editingMonitor.id}`, { method: 'PATCH', body: JSON.stringify({ name: form.get('name'), url: normalizedUrl, interval_minutes: Number(form.get('interval')), timeout_seconds: Number(form.get('timeout')), accepted_statuses: form.get('statuses'), failure_threshold: Number(form.get('failure_threshold')), recovery_threshold: Number(form.get('recovery_threshold')), ...monitorRequestPayload(form), ...responseRulesPayload(form) }) })
       setEditingMonitor(null); setToast('Monitor settings updated'); await loadDashboard(); await openMonitor(editingMonitor.id)
     } catch (reason) { setError(userFacingError(reason, 'Monitor settings could not be saved. Please try again.')) }
   }
@@ -1045,9 +1105,9 @@ function DashboardApp({ initialAuthMode = 'login' }: { initialAuthMode?: 'login'
 
   return <div className="app-shell"><PageMetadata title="Pingava dashboard" description="Your private Pingava monitoring dashboard." noIndex />
     <aside className="sidebar"><BrandLockup /><nav className={user.is_owner ? 'owner-nav' : ''}>{visibleNav.map((item) => <button key={item.id} className={active === item.id && !selectedMonitor ? 'nav-item active' : 'nav-item'} onClick={() => navigateTo(item.id)}><item.icon size={18} /><span>{item.label}</span>{item.id === 'incidents' && openIncidents.length > 0 && <b>{openIncidents.length}</b>}</button>)}</nav><div className="sidebar-bottom"><button className={active === 'alerts' && !selectedMonitor ? 'nav-item active' : 'nav-item'} onClick={() => navigateTo('alerts')}><Bell size={18} /><span>Alert channels</span></button><button className={active === 'settings' && !selectedMonitor ? 'nav-item active' : 'nav-item'} onClick={() => openSettings('profile')}><Settings size={18} /><span>Settings</span></button><div className="usage" style={{ cursor: 'pointer' }} onClick={() => openSettings('billing')} title="Click to manage Plan &amp; Billing"><div><span>Monitors</span><strong>{monitors.length} / {data?.limit || 10}</strong></div><div className="usage-bar"><span style={{ width: `${Math.min(100, monitors.length / Math.max(data?.limit || 10, 1) * 100)}%` }} /></div><small>{user.plan ? `${user.plan.toUpperCase()} Plan (${user.billing_cycle || 'monthly'})` : 'Workspace Allowance'}</small></div><AccountMenu user={user} onSettings={openSettings} onLogout={logout} /></div></aside>
-    <main><header className="topbar"><div className="mobile-brand"><BrandLockup compact /></div><label className="search"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search monitors" /></label><div className="header-actions"><button className="icon-btn" title="Notifications" onClick={() => navigateTo('incidents')}><Bell size={18} /></button><button className="icon-btn theme-toggle" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark' )}>{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button><button className="primary-btn" onClick={() => { setError(''); setShowAdd(true) }}><Plus size={17} />Add monitor</button></div></header><div className="content">{((active !== 'overview' && active !== 'incidents' && active !== 'status' && active !== 'observability' && (user.is_owner || active !== 'admin')) || selectedMonitor) ? <div className="page-heading"><div><p className="eyebrow">{selectedMonitor ? 'Monitor detail' : active === 'admin' ? 'Product administration' : active === 'heartbeats' ? 'Passive Worker Monitoring' : active === 'radar' ? 'Predictive SRE Engine' : active === 'edge' ? 'Global Network Infrastructure' : 'Pingava workspace'}</p><h1>{selectedMonitor?.monitor.name || visibleNav.find((item) => item.id === active)?.label || (active === 'alerts' ? 'Alert channels' : 'Settings')}</h1><p>{selectedMonitor ? 'Live health, configuration, checks, and incident history.' : active === 'admin' ? 'Operational health, users, deliveries, and database backups.' : active === 'heartbeats' ? 'Passive "Dead Man\'s Snitch" monitoring for database backups, queues, and recurring cron jobs.' : active === 'radar' ? 'Silent degradation detection, latency jitter radar, and drift forecasting.' : active === 'edge' ? 'Multi-region DNS propagation, TLS handshakes, and regional edge latency.' : active === 'settings' ? 'Manage your account, security and notification preferences.' : 'Real HTTP monitoring with confirmed outage detection.'}</p></div><div className="live-badge"><span />Updates every 15 seconds</div></div> : null}{error && <div className="page-error"><TriangleAlert size={17} />{error}<button onClick={() => setError('')}><X size={15} /></button></div>}{selectedMonitor ? <MonitorDetail data={selectedMonitor} onBack={() => setSelectedMonitor(null)} onAction={updateMonitor} onEdit={setEditingMonitor} onDelete={setDeletingMonitor} /> : isOwnerOnlyView(active) && !user.is_owner ? <section className="monitors-section page-panel" style={{ textAlign: 'center', padding: '3.5rem 1.5rem' }}><div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', marginBottom: '1.25rem' }}><ShieldAlert size={30} /></div><h2 style={{ fontSize: '1.35rem', fontWeight: 700, color: '#f8fafc', marginBottom: '0.5rem' }}>Access Denied: Owner Privileges Required</h2><p style={{ color: '#94a3b8', maxWidth: '460px', margin: '0 auto 1.5rem', lineHeight: 1.6, fontSize: '0.92rem' }}>The <strong>{active === 'observability' ? 'Self-Observability & Telemetry' : 'Owner Administration'}</strong> console is restricted to workspace administrators. Your account does not have authorization to view this area.</p><button className="primary-btn" style={{ margin: '0 auto' }} onClick={() => navigateTo('overview')}>Return to Overview</button></section> : active === 'observability' && user.is_owner ? <PingavaObservability user={user} onBack={() => navigateTo('overview')} /> : active === 'admin' && user.is_owner ? <AdminPanel user={user} /> : active === 'heartbeats' ? <CronHeartbeatManager user={user} onNavigate={navigateTo} /> : active === 'radar' ? <LatencyAnomalyRadar mode="fleet" monitors={monitors} onSelectMonitor={(m) => void openMonitor(m.id)} /> : active === 'edge' ? <MultiRegionEdgeInspector monitors={monitors} /> : active === 'incidents' ? <IncidentManagement monitors={monitors} onRefresh={loadDashboard} /> : active === 'status' ? <StatusPageSettings user={user} monitors={monitors} onRefresh={loadDashboard} onAddMonitor={() => setShowAdd(true)} /> : active === 'alerts' ? <><AlertChannels monitors={monitors} email={user.email} onRefresh={loadDashboard} /><SubscriberAdmin /></> : active === 'settings' ? <AccountSettings user={user} monitors={monitors} limit={data?.limit || 10} activeTab={settingsTab} onTabChange={setSettingsTab} onUserChange={setUser} onRefresh={loadDashboard} onLogout={logout} /> : active === 'overview' && data ? <OverviewDashboard user={user} dashboard={data} onAddMonitor={() => { setError(''); setShowAdd(true) }} onOpenMonitor={(id) => void openMonitor(id)} onNavigate={navigateTo} onMonitorAction={updateMonitor} /> : content}</div></main>
+    <main><header className="topbar"><div className="mobile-brand"><BrandLockup compact /></div><label className="search"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search monitors" /></label><div className="header-actions"><button className="icon-btn" title="Notifications" onClick={() => navigateTo('incidents')}><Bell size={18} /></button><button className="icon-btn theme-toggle" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark' )}>{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button><button className="primary-btn" onClick={() => { setError(''); setShowAdd(true) }}><Plus size={17} />Add monitor</button></div></header><div className="content">{((active !== 'overview' && active !== 'incidents' && active !== 'status' && active !== 'observability' && (user.is_owner || active !== 'admin')) || selectedMonitor) ? <div className="page-heading"><div><p className="eyebrow">{selectedMonitor ? 'Monitor detail' : active === 'admin' ? 'Product administration' : active === 'heartbeats' ? 'Passive Worker Monitoring' : active === 'radar' ? 'Predictive SRE Engine' : active === 'edge' ? 'Global Network Infrastructure' : 'Pingava workspace'}</p><h1>{selectedMonitor?.monitor.name || visibleNav.find((item) => item.id === active)?.label || (active === 'alerts' ? 'Alert channels' : 'Settings')}</h1><p>{selectedMonitor ? 'Live health, configuration, checks, and incident history.' : active === 'admin' ? 'Operational health, users, deliveries, and database backups.' : active === 'heartbeats' ? 'Passive "Dead Man\'s Snitch" monitoring for database backups, queues, and recurring cron jobs.' : active === 'radar' ? 'Silent degradation detection, latency jitter radar, and drift forecasting.' : active === 'edge' ? 'Multi-region DNS propagation, TLS handshakes, and regional edge latency.' : active === 'settings' ? 'Manage your account, security and notification preferences.' : 'Real HTTP monitoring with confirmed outage detection.'}</p></div><div className="live-badge"><span />Updates every 15 seconds</div></div> : null}{error && <div className="page-error"><TriangleAlert size={17} />{error}<button onClick={() => setError('')}><X size={15} /></button></div>}{selectedMonitor ? <MonitorDetail data={selectedMonitor} onBack={() => setSelectedMonitor(null)} onAction={updateMonitor} onEdit={setEditingMonitor} onDelete={setDeletingMonitor} /> : isOwnerOnlyView(active) && !user.is_owner ? <section className="monitors-section page-panel" style={{ textAlign: 'center', padding: '3.5rem 1.5rem' }}><div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', marginBottom: '1.25rem' }}><ShieldAlert size={30} /></div><h2 style={{ fontSize: '1.35rem', fontWeight: 700, color: '#f8fafc', marginBottom: '0.5rem' }}>Access Denied: Owner Privileges Required</h2><p style={{ color: '#94a3b8', maxWidth: '460px', margin: '0 auto 1.5rem', lineHeight: 1.6, fontSize: '0.92rem' }}>The <strong>{active === 'observability' ? 'Self-Observability & Telemetry' : 'Owner Administration'}</strong> console is restricted to workspace administrators. Your account does not have authorization to view this area.</p><button className="primary-btn" style={{ margin: '0 auto' }} onClick={() => navigateTo('overview')}>Return to Overview</button></section> : active === 'observability' && user.is_owner ? <PingavaObservability user={user} onBack={() => navigateTo('overview')} /> : active === 'admin' && user.is_owner ? <AdminPanel user={user} /> : active === 'heartbeats' ? <CronHeartbeatManager user={user} onNavigate={(v) => navigateTo(v as View)} /> : active === 'radar' ? <LatencyAnomalyRadar mode="fleet" onOpenMonitor={(id) => void openMonitor(id)} /> : active === 'edge' ? <MultiRegionEdgeInspector monitors={monitors} /> : active === 'incidents' ? <IncidentManagement monitors={monitors} onRefresh={loadDashboard} /> : active === 'status' ? <StatusPageSettings user={user} monitors={monitors} onRefresh={loadDashboard} onAddMonitor={() => setShowAdd(true)} /> : active === 'alerts' ? <><AlertChannels monitors={monitors} email={user.email} onRefresh={loadDashboard} /><SubscriberAdmin /></> : active === 'settings' ? <AccountSettings user={user} monitors={monitors} limit={data?.limit || 10} activeTab={settingsTab} onTabChange={setSettingsTab} onUserChange={setUser} onRefresh={loadDashboard} onLogout={logout} /> : active === 'overview' && data ? <OverviewDashboard user={user} dashboard={data} onAddMonitor={() => { setError(''); setShowAdd(true) }} onOpenMonitor={(id) => void openMonitor(id)} onNavigate={navigateTo} onMonitorAction={updateMonitor} /> : content}</div></main>
     {showAdd && <AddMonitor onClose={() => setShowAdd(false)} onSubmit={addMonitor} rules={<ResponseRulesFields />} error={error} />}
-    {editingMonitor && <div className="modal-backdrop" onMouseDown={() => setEditingMonitor(null)}><div className="modal monitor-modal" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div className="modal-icon"><Pencil size={19} /></div><div><h2>Edit monitor</h2><p>Request changes apply to the next check.</p></div><button className="icon-btn" onClick={() => setEditingMonitor(null)}><X size={19} /></button></div><form onSubmit={saveMonitor}><label>Monitor name<input name="name" required defaultValue={editingMonitor.name} /></label><MonitorRequestFields monitor={editingMonitor} /><div className="form-grid"><label>Check interval<select name="interval" defaultValue={editingMonitor.interval_minutes}><option value="5">Every 5 minutes</option><option value="10">Every 10 minutes</option></select></label><label>Timeout in seconds<input name="timeout" type="number" min="2" max="60" defaultValue={editingMonitor.timeout_seconds} required /></label></div><label>Expected status codes<input name="statuses" required defaultValue={editingMonitor.accepted_statuses} /><small>Example: 200-299,304</small></label><ResponseRulesFields monitor={editingMonitor} /><div className="form-grid"><label>Failures before incident<input name="failure_threshold" type="number" min="1" max="10" defaultValue={editingMonitor.failure_threshold} required /></label><label>Successes before recovery<input name="recovery_threshold" type="number" min="1" max="10" defaultValue={editingMonitor.recovery_threshold} required /></label></div>{error && <div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="secondary-btn" onClick={() => setEditingMonitor(null)}>Cancel</button><button className="primary-btn"><Check size={16} />Save changes</button></div></form></div></div>}
+    {editingMonitor && <div className="modal-backdrop" onMouseDown={() => setEditingMonitor(null)}><div className="modal monitor-modal" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div className="modal-icon"><Pencil size={19} /></div><div><h2>Edit monitor</h2><p>Request changes apply to the next check.</p></div><button className="icon-btn" onClick={() => setEditingMonitor(null)}><X size={19} /></button></div><form onSubmit={saveMonitor}><label>Monitor name<input name="name" required defaultValue={editingMonitor.name} /></label><MonitorRequestFields monitor={editingMonitor} /><label>Expected status codes<input name="statuses" required defaultValue={editingMonitor.accepted_statuses} /><small>Example: 200-299,304</small></label><ResponseRulesFields monitor={editingMonitor} /><div className="form-grid"><label>Failures before incident<input name="failure_threshold" type="number" min="1" max="10" defaultValue={editingMonitor.failure_threshold} required /></label><label>Successes before recovery<input name="recovery_threshold" type="number" min="1" max="10" defaultValue={editingMonitor.recovery_threshold} required /></label></div>{error && <div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="secondary-btn" onClick={() => setEditingMonitor(null)}>Cancel</button><button className="primary-btn"><Check size={16} />Save changes</button></div></form></div></div>}
     {deletingMonitor && <div className="modal-backdrop" onMouseDown={() => setDeletingMonitor(null)}><div className="modal confirm-modal" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div className="modal-icon danger"><Trash2 size={19} /></div><div><h2>Delete {deletingMonitor.name}?</h2><p>This also removes its checks and incident history.</p></div></div><div className="confirm-actions"><button className="secondary-btn" onClick={() => setDeletingMonitor(null)}>Cancel</button><button className="danger-btn" onClick={() => void confirmDelete()}><Trash2 size={16} />Delete monitor</button></div></div></div>}
     {toast && <div className="toast"><CheckCircle2 size={18} />{toast}</div>}
   </div>
@@ -1099,7 +1159,8 @@ function AppRouter() {
     window.history.replaceState({}, '', target)
     return <DashboardApp />
   }
-  if (path === '/marketing' || path === '/home') return <HomeStory />
+  if (path === '/demo') return <DemoDashboard />
+  if (path === '/' || path === '/features' || path === '/marketing' || path === '/home') return <HomeStory />
   if (isPublicPagePath(path)) return <PublicPage path={path} />
   if (path === '/website-monitoring') return <ReferenceProductPage kind="website-monitoring" />
   if (path === '/api-monitoring') return <ReferenceProductPage kind="api-monitoring" />
@@ -1116,7 +1177,6 @@ function AppRouter() {
     }
     return <DashboardApp />
   }
-  if (path === '/') return <DashboardApp />
   return <NotFoundPage title="Page not found" />
 }
 

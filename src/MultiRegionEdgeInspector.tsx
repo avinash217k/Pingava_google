@@ -1,12 +1,8 @@
 import { useEffect, useState } from 'react'
 import {
-  Activity,
   AlertTriangle,
-  ArrowRight,
   Check,
   CheckCircle2,
-  Clock3,
-  ExternalLink,
   Globe2,
   Lock,
   Network,
@@ -33,7 +29,7 @@ export function MultiRegionEdgeInspector({
   embedded = false,
 }: MultiRegionEdgeInspectorProps) {
   const [urlInput, setUrlInput] = useState<string>(
-    initialUrl || monitor?.url || 'https://httpbin.org/status/200'
+    initialUrl || monitor?.url || monitors[0]?.url || 'https://httpbin.org/status/200'
   )
   const [data, setData] = useState<EdgeInspectResult | null>(null)
   const [loading, setLoading] = useState(false)

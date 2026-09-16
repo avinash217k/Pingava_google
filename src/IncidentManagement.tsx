@@ -193,11 +193,12 @@ export function IncidentManagement({ monitors, onRefresh }: { monitors: Monitor[
     setSubmitting(true)
     setError('')
     try {
-      await api('/status-incidents', {
+      await api('/incidents', {
         method: 'POST',
         body: JSON.stringify({
-          title: form.get('title'),
-          message: form.get('message'),
+          title: String(form.get('title') || 'Manual incident report'),
+          summary: String(form.get('message') || ''),
+          message: String(form.get('message') || ''),
           monitor_ids: monitorIds,
         }),
       })

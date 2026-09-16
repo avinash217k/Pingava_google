@@ -2,20 +2,13 @@ import { useEffect, useState } from 'react'
 import {
   Check,
   Zap,
-  CreditCard,
-  ShieldCheck,
-  Layers,
-  Clock,
   Sparkles,
   ArrowRight,
-  TrendingDown,
   Info,
   Receipt,
   Download,
   X,
   Lock,
-  Globe,
-  Activity,
   Award
 } from 'lucide-react'
 import {

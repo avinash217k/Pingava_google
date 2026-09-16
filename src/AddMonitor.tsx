@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type FormEvent } from 'react'
 import { Check, Code2, Globe2, Play, Plus, Settings2, X } from 'lucide-react'
-import { api, userFacingError } from './api'
+import { api, normalizeEndpointUrl, userFacingError } from './api'
 import { MonitorRequestFields } from './MonitorRequestFields'
 import { monitorRequestPayload } from './monitorRequestPayload'
 import './AddMonitor.css'
@@ -30,8 +30,9 @@ export function AddMonitor({ onClose, onSubmit, rules, error }: { onClose: () =>
     setBusy('test'); setResult(null); setTestError('')
     try {
       const threshold = String(data.get('response_time_threshold_ms') || '').trim()
+      const normalizedTestUrl = normalizeEndpointUrl(String(data.get('url') || ''))
       setResult(await api<Result>('/monitors/test', { method: 'POST', body: JSON.stringify({
-        name: String(data.get('name') || 'Test request'), url: data.get('url'), ...monitorRequestPayload(data),
+        name: String(data.get('name') || 'Test request'), url: normalizedTestUrl, ...monitorRequestPayload(data),
         timeout_seconds: Number(data.get('timeout')), accepted_statuses: data.get('statuses'),
         response_time_threshold_ms: threshold ? Number(threshold) : null,
         body_assertion: data.get('body_assertion'), body_assertion_value: data.get('body_assertion_value') || null,
@@ -69,7 +70,7 @@ export function AddMonitor({ onClose, onSubmit, rules, error }: { onClose: () =>
     <form ref={form} onSubmit={submit} onChange={() => { setResult(null); setTestError('') }}>
       <div className="add-monitor-body"><fieldset className="monitor-kind" disabled={Boolean(busy)}><legend>Monitor type</legend>{(['website', 'api'] as const).map((value) => <label key={value} className={kind === value ? 'chosen' : ''}><input type="radio" name="monitor_kind" value={value} checked={kind === value} onChange={() => setKind(value)} />{value === 'website' ? <Globe2 size={25} /> : <Code2 size={25} />}<strong>{value === 'website' ? 'Website / URL' : 'API Endpoint'}</strong><span>{value === 'website' ? 'Simple uptime monitoring for any website.' : 'Methods, headers, body and response validation.'}</span>{kind === value && <Check className="kind-check" size={17} />}</label>)}</fieldset>
       <section className="add-monitor-basics"><h3>Basic information</h3><label>Monitor name<input name="name" required maxLength={80} placeholder={kind === 'website' ? 'My Website' : 'Production API'} /></label>
-      {kind === 'website' ? <><input type="hidden" name="http_method" value="GET" /><label>URL<input name="url" type="url" required placeholder="https://example.com" /></label><p className="add-monitor-hint">We’ll use sensible defaults that work for most websites.</p></> : <MonitorRequestFields guided />}</section>
+      {kind === 'website' ? <><input type="hidden" name="http_method" value="GET" /><label>URL<input name="url" type="text" inputMode="url" autoCapitalize="none" autoCorrect="off" required placeholder="https://example.com" onBlur={(e) => { if (e.target.value.trim()) e.target.value = normalizeEndpointUrl(e.target.value) }} /></label><p className="add-monitor-hint">We’ll use sensible defaults that work for most websites.</p></> : <MonitorRequestFields guided />}</section>
       {kind === 'website' ? <details className="add-monitor-options"><summary><Settings2 size={18} /><span>Advanced options<small>Timing, response validation and incident settings</small></span></summary><div>{settings}{validation}{incidents}</div></details> : <><details className="add-monitor-options"><summary>Response validation</summary><div>{validation}</div></details><details className="add-monitor-options"><summary>Incident detection</summary><div>{incidents}</div></details></>}
       {(testError || error) && <p role="alert" className="form-error">{testError || error}</p>}
       {result && <section className="monitor-test-result" aria-live="polite"><div className={result.ok ? 'test-pass' : 'test-fail'}>{result.ok ? <Check size={18} /> : <X size={18} />}<strong>{result.status_code ? `HTTP ${result.status_code}` : 'Connection failed'}</strong><span>{result.response_time} ms</span></div><div className="test-tabs" role="tablist" aria-label="Test result">{(['Response', 'Headers', 'Assertions'] as const).map((value) => <button type="button" role="tab" aria-selected={tab === value} key={value} onClick={() => setTab(value)}>{value}</button>)}</div><pre>{tab === 'Headers' ? JSON.stringify(result.response_headers || {}, null, 2) : tab === 'Assertions' ? result.error || 'All configured checks passed.' : result.response_body_preview || result.error || 'No text response body.'}</pre>{result.response_body_truncated && <small>Response preview truncated to 20 KB.</small>}</section>}

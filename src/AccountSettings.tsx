@@ -4,6 +4,7 @@ import { api, userFacingError, type Monitor, type User } from './api'
 import { UserAvatar } from './UserAvatar'
 import { useTheme, type ThemeMode } from './ThemeContext'
 import { PlanBilling } from './PlanBilling'
+import { publicHref } from './appConfig'
 
 export type SettingsTab = 'profile' | 'security' | 'notifications' | 'billing'
 
@@ -21,6 +22,7 @@ export function AccountSettings({ user, monitors, limit, activeTab, onTabChange,
   const [saving, setSaving] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deletePassword, setDeletePassword] = useState('')
 
   const logoutAllDevices = async () => {
     setError('')
@@ -46,7 +48,15 @@ export function AccountSettings({ user, monitors, limit, activeTab, onTabChange,
     setMessage('')
     setSaving(true)
     try {
-      await api('/me', { method: 'DELETE' })
+      await api('/me', {
+        method: 'DELETE',
+        body: JSON.stringify({
+          confirmation: deleteConfirmText.trim().toUpperCase(),
+          confirm_text: deleteConfirmText.trim().toUpperCase(),
+          current_password: deletePassword,
+          password: deletePassword,
+        })
+      })
       setShowDeleteModal(false)
       onLogout()
     } catch (reason) {
@@ -76,7 +86,9 @@ export function AccountSettings({ user, monitors, limit, activeTab, onTabChange,
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'auto' }}>
               <a
-                href="/marketing"
+                href={publicHref('/')}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="secondary-btn"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', textDecoration: 'none', height: '38px', padding: '0 16px', fontSize: '13px', fontWeight: 600 }}
               >
@@ -170,6 +182,21 @@ export function AccountSettings({ user, monitors, limit, activeTab, onTabChange,
           <p style={{ fontSize: '13px', color: '#475467', lineHeight: 1.5, marginBottom: '16px' }}>
             All monitoring schedules for <strong>{user.email}</strong> will terminate, historical uptime logs will be wiped, and your access will be revoked immediately.
           </p>
+          {user.auth_provider !== 'google' && (
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 500, color: '#344054', display: 'block', marginBottom: '6px' }}>
+                Enter your current password:
+              </label>
+              <input
+                type="password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                placeholder="Current password"
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid #d0d5dd', borderRadius: '6px', fontSize: '13px' }}
+                required
+              />
+            </div>
+          )}
           <div style={{ marginBottom: '20px' }}>
             <label style={{ fontSize: '12px', fontWeight: 500, color: '#344054', display: 'block', marginBottom: '6px' }}>
               Type <strong>DELETE</strong> to confirm:
@@ -195,7 +222,7 @@ export function AccountSettings({ user, monitors, limit, activeTab, onTabChange,
             <button
               type="button"
               className="danger-btn"
-              disabled={saving || deleteConfirmText.trim().toUpperCase() !== 'DELETE'}
+              disabled={saving || deleteConfirmText.trim().toUpperCase() !== 'DELETE' || (user.auth_provider !== 'google' && !deletePassword)}
               onClick={deleteAccount}
             >
               <Trash2 size={16} />

@@ -1,6 +1,7 @@
 import dns from "dns";
 import tls from "tls";
 import { URL } from "url";
+import { validateSafeOutboundTarget, safeFetch } from "./securityService";
 
 export interface EdgeRegionResult {
   region_id: 'us-east' | 'us-west' | 'eu-central' | 'eu-west' | 'ap-southeast' | 'ap-northeast';
@@ -324,8 +325,10 @@ export function validateContractAgainstPayload(
     }
   }
 
-  const total = Math.max(1, expectedFields.length);
-  const complianceRate = Math.max(0, Math.min(100, Math.round((matchedCount / total) * 1000) / 10));
+  const total = expectedFields.length;
+  const complianceRate = total === 0
+    ? 100.0
+    : Math.max(0, Math.min(100, Math.round((matchedCount / total) * 1000) / 10));
   const driftScore = Math.max(0, Math.min(100, Math.round((breakingChanges.length * 35 + (contract.strict_mode ? additions.length * 15 : additions.length * 5)))));
 
   return {
@@ -370,6 +373,9 @@ export async function inspectNetworkEdge(targetUrl: string): Promise<EdgeInspect
     parsedUrl = new URL('https://' + targetUrl);
   }
 
+  // SSRF Protection: Validate target before initiating DNS and TLS probes
+  await validateSafeOutboundTarget(parsedUrl.toString());
+
   const hostname = parsedUrl.hostname;
   const isHttps = parsedUrl.protocol === 'https:';
 
@@ -401,15 +407,20 @@ export async function inspectNetworkEdge(targetUrl: string): Promise<EdgeInspect
           if (cert && cert.valid_to) {
             const validTo = new Date(cert.valid_to);
             const daysRemaining = Math.max(0, Math.floor((validTo.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
-            const sans = Array.isArray(cert.subjectaltname)
-              ? cert.subjectaltname
-              : typeof cert.subjectaltname === 'string'
-                ? (cert.subjectaltname as string).split(', ').map(s => s.replace(/^DNS:/, ''))
+            const rawSans = cert.subjectaltname;
+            const sans: string[] = Array.isArray(rawSans)
+              ? (rawSans as string[])
+              : typeof rawSans === 'string'
+                ? (rawSans as string).split(', ').map(s => s.replace(/^DNS:/, ''))
                 : [hostname];
 
+            const subCn = Array.isArray(cert.subject?.CN) ? cert.subject.CN[0] : cert.subject?.CN;
+            const issO = Array.isArray(cert.issuer?.O) ? cert.issuer.O[0] : cert.issuer?.O;
+            const issCn = Array.isArray(cert.issuer?.CN) ? cert.issuer.CN[0] : cert.issuer?.CN;
+
             resolve({
-              subject: cert.subject?.CN || hostname,
-              issuer: cert.issuer?.O ? `${cert.issuer.O} (${cert.issuer.CN || ''})` : (cert.issuer?.CN || "GlobalSign / Cloudflare"),
+              subject: subCn || hostname,
+              issuer: issO ? `${issO} (${issCn || ''})` : (issCn || "GlobalSign / Cloudflare"),
               valid_from: cert.valid_from || new Date(Date.now() - 30 * 86400000).toISOString(),
               valid_to: cert.valid_to,
               days_remaining: daysRemaining,
@@ -462,7 +473,7 @@ export async function inspectNetworkEdge(targetUrl: string): Promise<EdgeInspect
     const fetchStart = Date.now();
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 5000);
-    const resp = await fetch(parsedUrl.toString(), {
+    const resp = await safeFetch(parsedUrl.toString(), {
       method: 'GET',
       signal: ctrl.signal,
       headers: { 'User-Agent': 'Pingava-Edge-Inspector/2.0' }

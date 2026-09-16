@@ -1153,7 +1153,7 @@ export function StatusPageSettings({ user, monitors: initialMonitors, onRefresh,
 
                   {/* FOOTER */}
                   <div className="preview-footer-credits">
-                    <BrandMark compact />
+                    <BrandMark />
                     <span>Powered by Pingava</span>
                   </div>
                 </div>

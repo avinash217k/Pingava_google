@@ -7,16 +7,14 @@ const { Pool } = pg;
 let poolInstance: pg.Pool | null = null;
 let saveDebounceTimer: NodeJS.Timeout | null = null;
 
-const DEFAULT_SUPABASE_DB_URL =
-  process.env.SUPABASE_DB_URL ||
-  'postgresql://postgres.fahgatpftgecvfbfhegf:Shambhawi%402175@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres';
+const SUPABASE_DB_URL = process.env.SUPABASE_DB_URL || '';
 
 export function getSupabasePool(): pg.Pool | null {
   if (poolInstance) return poolInstance;
 
-  const connectionString = DEFAULT_SUPABASE_DB_URL;
+  const connectionString = SUPABASE_DB_URL;
   if (!connectionString) {
-    console.warn('[Supabase] No SUPABASE_DB_URL configured. Supabase sync disabled.');
+    // Gracefully disabled when SUPABASE_DB_URL environment variable is not configured
     return null;
   }
 
@@ -49,8 +47,9 @@ export async function syncStateToSupabase(state: PersistentStoreState): Promise<
   if (!pool) return;
 
   const syncStartTime = Date.now();
-  const client = await pool.connect();
+  let client: any = null;
   try {
+    client = await pool.connect();
     // 1. Sync Users
     if (state.users && state.users.length > 0) {
       for (const u of state.users) {
@@ -364,7 +363,9 @@ export async function syncStateToSupabase(state: PersistentStoreState): Promise<
     observability.recordSupabaseQuery(0, false, err?.message || String(err));
     console.error('[Supabase Dual-Write] Warning during state sync:', err.message);
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 }
 

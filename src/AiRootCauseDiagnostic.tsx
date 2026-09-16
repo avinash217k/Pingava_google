@@ -125,7 +125,7 @@ export function AiRootCauseDiagnostic({
               <h3>AI Root Cause Diagnostics</h3>
               {diagnostic?.engine && (
                 <span className={`ai-engine-tag ${diagnostic.engine === 'gemini-3.8-flash' ? 'gemini' : 'heuristic'}`}>
-                  {diagnostic.engine === 'gemini-3.8-flash' ? 'Gemini 3.8 Flash' : 'Pingava SRE Engine'}
+                  {diagnostic.engine === 'gemini-3.8-flash' ? 'AI Diagnostic Engine' : 'Pingava SRE Engine'}
                 </span>
               )}
               {diagnostic?.confidence && (
@@ -140,7 +140,7 @@ export function AiRootCauseDiagnostic({
               )}
             </div>
             <p className="ai-subtitle">
-              Automated telemetry synthesis &amp; network protocol triage powered by Google Gemini.
+              Automated telemetry synthesis &amp; network protocol triage powered by AI.
             </p>
           </div>
         </div>
@@ -165,7 +165,7 @@ export function AiRootCauseDiagnostic({
             title="Generate fresh AI diagnosis based on latest HTTP headers and check logs"
           >
             <RefreshCw size={13} className={loading ? 'spinning' : ''} />
-            {loading ? 'Analyzing with Gemini...' : diagnostic ? 'Re-analyze' : 'Run AI Diagnosis'}
+            {loading ? 'Analyzing with AI...' : diagnostic ? 'Re-analyze' : 'Run AI Diagnosis'}
           </button>
         </div>
       </div>
@@ -183,7 +183,7 @@ export function AiRootCauseDiagnostic({
             <Sparkles size={20} className="spinning" />
           </div>
           <strong>Synthesizing HTTP transaction headers and timing breakdown...</strong>
-          <p>Gemini 3.8 Flash is correlating DNS, TLS handshake, origin socket state, and status codes.</p>
+          <p>AI diagnostic engine is correlating DNS, TLS handshake, origin socket state, and status codes.</p>
         </div>
       )}
 
@@ -196,7 +196,7 @@ export function AiRootCauseDiagnostic({
           </div>
           <button type="button" className="primary-btn" onClick={() => void runAnalysis()}>
             <Sparkles size={14} />
-            Diagnose Root Cause with Gemini
+            Diagnose Root Cause with AI
           </button>
         </div>
       )}

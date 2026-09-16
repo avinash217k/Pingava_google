@@ -4,8 +4,6 @@ import {
   Bell,
   CheckCircle2,
   Clock,
-  ExternalLink,
-  Globe,
   Info,
   Lock,
   RefreshCw,

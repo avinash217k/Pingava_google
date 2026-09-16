@@ -2,21 +2,15 @@ import { useEffect, useState } from 'react'
 import {
   AlertCircle,
   AlertTriangle,
-  ArrowRight,
-  Bell,
   Check,
   CheckCircle2,
   Clock,
   Code2,
   Copy,
-  ExternalLink,
   HeartPulse,
-  Info,
   Pause,
   Play,
   Plus,
-  RefreshCw,
-  Sparkles,
   Terminal,
   Trash2,
   X,
@@ -75,7 +69,7 @@ function timeAgo(dateString: string | null): string {
   return `${Math.floor(seconds / 86400)}d ago`
 }
 
-export function CronHeartbeatManager({ user }: CronHeartbeatManagerProps) {
+export function CronHeartbeatManager({ user: _user, onNavigate: _onNavigate }: CronHeartbeatManagerProps) {
   const [heartbeats, setHeartbeats] = useState<Heartbeat[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')

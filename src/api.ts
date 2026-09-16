@@ -91,7 +91,7 @@ export type Check = { id: number; monitor_id: number; execution_source: 'schedul
 export type Dashboard = { monitors: Monitor[]; incidents: Incident[]; recent_checks: Check[]; limit: number }
 export type MonitorDetail = { monitor: Monitor; average_response_time: number | null; checks: Check[]; incidents: Incident[] }
 export type AlertDelivery = { id: number; monitor_id: number | null; kind: string; recipient: string; status: string; provider_id: string | null; error: string | null; created_at: string; sent_at: string | null }
-export type WebhookChannel = { id: number; user_id?: number; name: string; masked_url: string; channel_type?: 'slack' | 'discord' | 'generic'; alert_on_down: boolean; alert_on_recovery: boolean; alert_on_ssl_expiry: boolean; active: boolean; failure_count: number; created_at: string; updated_at: string }
+export type WebhookChannel = { id: number; user_id?: number; name: string; masked_url: string; channel_type?: 'slack' | 'discord' | 'telegram' | 'generic'; alert_on_down: boolean; alert_on_recovery: boolean; alert_on_ssl_expiry: boolean; active: boolean; failure_count: number; created_at: string; updated_at: string }
 export type WebhookDelivery = { id: number; webhook_id: number; webhook_name: string; monitor_id: number | null; kind: string; status: string; response_code: number | null; error: string | null; created_at: string; delivered_at: string | null }
 export type StatusPage = {
   slug: string;
@@ -613,3 +613,40 @@ export async function clearObservabilityErrors(): Promise<{ success: boolean; me
     method: 'POST'
   });
 }
+
+/**
+ * Normalizes user-entered URLs:
+ * - Trims whitespace
+ * - If user types "facebook.com", prefixes "https://" -> "https://facebook.com"
+ * - If user types with typos like "htttps://", "htps://", "http//", "https//", fixes them to "https://"
+ * - Preserves explicit "http://"
+ * - Preserves explicit "https://"
+ */
+export function normalizeEndpointUrl(rawUrl: string): string {
+  let url = String(rawUrl || '').trim();
+  if (!url) return '';
+
+  // Fix common typo prefixes
+  if (/^https?:\/([^\/])/i.test(url)) {
+    url = url.replace(/^https?:\/([^\/])/i, 'https://$1');
+  } else if (/^https?\/\//i.test(url)) {
+    url = url.replace(/^https?\/\//i, 'https://');
+  }
+
+  // Handle typos in http/https scheme (e.g. htttps://, htps://, httsp://, httpss://, htttp://)
+  if (/^(?:ht+ps?|htt+sp?|https+)(?::\/\/|\/\/)/i.test(url)) {
+    if (/^http:\/\//i.test(url)) {
+      // keep explicit http
+    } else {
+      url = url.replace(/^(?:ht+ps?|htt+sp?|https+)(?::\/\/|\/\/)/i, 'https://');
+    }
+  }
+
+  // If no scheme present, default to https://
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = `https://${url}`;
+  }
+
+  return url;
+}
+
