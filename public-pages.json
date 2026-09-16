@@ -9,5 +9,7 @@
   "/blog": {"title": "Engineering & Reliability Blog | Pingava", "description": "Deep-dives on distributed synthetic probes, SSL lifecycle management, high-availability architecture, and incident response.", "indexable": true},
   "/changelog": {"title": "Product Changelog & Release Notes | Pingava", "description": "Explore the latest features, improvements, and fixes across the Pingava synthetic monitoring platform.", "indexable": true},
   "/pricing": {"title": "Pricing Plans & Tier Comparison | Pingava", "description": "Transparent pricing for developer teams and enterprises. Free forever tier, high-frequency checks, and custom probe locations.", "indexable": true},
+  "/features": {"title": "Features & SRE Observability Suite | Pingava", "description": "Explore Pingava features: 6-region edge inspector, predictive latency radar, API contract guardian, and Gemini AI root cause diagnostics.", "indexable": true},
+  "/demo": {"title": "Live Interactive Demo Dashboard | Pingava", "description": "Experience Pingava live with zero authentication. Explore synthetic monitors, edge waterfalls, latency anomaly radar, and incident timelines.", "indexable": true},
   "/status": {"title": "Pingava System Status & Service Health", "description": "Live status, 90-day uptime metrics, and real-time operational health across Pingava's global probe network and core platform.", "indexable": true}
 }

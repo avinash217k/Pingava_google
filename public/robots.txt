@@ -1,0 +1,19 @@
+User-agent: *
+Allow: /
+Allow: /pricing
+Allow: /features
+Allow: /docs
+Allow: /blog
+Allow: /status
+Allow: /status/*
+Allow: /demo
+Disallow: /dashboard/
+Disallow: /dashboard/*
+Disallow: /app/
+Disallow: /app/*
+Disallow: /api/
+Disallow: /api/*
+Disallow: /settings/
+Disallow: /settings/*
+
+Sitemap: https://www.pingava.com/sitemap.xml
