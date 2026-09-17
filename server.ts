@@ -1825,7 +1825,7 @@ welcome@pingava.com`;
     try {
       const result = await sendEmailAlert({
         to: userEmail,
-        fromEmail: "welcome@pingava.com",
+        fromEmail: process.env.EMAIL_FROM || process.env.SMTP_FROM || "welcome@pingava.com",
         fromName: "Pingava",
         replyTo: "connect@pingava.com",
         subject: `Welcome to Pingava, ${firstName} — Next-Gen Synthetic Uptime & API Monitoring`,
@@ -1991,7 +1991,7 @@ welcome@pingava.com`;
 
     void sendEmailAlert({
       to: newUser.email,
-      fromEmail: process.env.EMAIL_FROM || "welcome@pingava.com",
+      fromEmail: process.env.EMAIL_FROM || process.env.SMTP_FROM || "welcome@pingava.com",
       fromName: "Pingava",
       subject: "Verify your email — Pingava",
       text: `Welcome to Pingava! Please verify your email by clicking the following link:\n\n${verifyUrl}\n\nThis link will activate your account.`,
@@ -2097,7 +2097,7 @@ welcome@pingava.com`;
       try {
         await sendEmailAlert({
           to: user.email,
-          fromEmail: process.env.EMAIL_FROM || "welcome@pingava.com",
+          fromEmail: process.env.EMAIL_FROM || process.env.SMTP_FROM || "welcome@pingava.com",
           fromName: "Pingava",
           subject: "Verify your email — Pingava",
           text: `Please verify your email by clicking the following link:\n\n${verifyUrl}`,
@@ -2141,7 +2141,7 @@ welcome@pingava.com`;
     try {
       const result = await sendEmailAlert({
         to: user.email,
-        fromEmail: process.env.EMAIL_FROM || "welcome@pingava.com",
+        fromEmail: process.env.EMAIL_FROM || process.env.SMTP_FROM || "welcome@pingava.com",
         fromName: "Pingava",
         subject: "Reset your password — Pingava",
         text: `We received a request to reset your password. Click the link below to set a new password:\n\n${resetUrl}\n\nThis link expires in 1 hour.`,

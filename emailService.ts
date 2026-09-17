@@ -30,6 +30,7 @@ function getTransporter(): Transporter | null {
       host,
       port,
       secure: port === 465,
+      name: process.env.SMTP_HELO_DOMAIN || 'pingava.com',
       auth: {
         user,
         pass,
@@ -41,13 +42,13 @@ function getTransporter(): Transporter | null {
 }
 
 /**
- * Sends an email using configured Brevo SMTP credentials.
+ * Sends an email using configured SMTP credentials (ZeptoMail / Brevo / Zoho / Custom SMTP).
  * If credentials are not set, logs the alert gracefully so the app never crashes.
  */
 export async function sendEmailAlert(options: SendAlertOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const transporter = getTransporter();
-  const fromAddress = process.env.SMTP_FROM || process.env.ALERT_EMAIL_FROM || process.env.EMAIL_FROM || 'alerts@pingava.com';
-  const fromName = process.env.EMAIL_FROM_NAME || 'Pingava Alerts';
+  const fromAddress = options.fromEmail || process.env.SMTP_FROM || process.env.ALERT_EMAIL_FROM || process.env.EMAIL_FROM || 'alerts@pingava.com';
+  const fromName = options.fromName || process.env.EMAIL_FROM_NAME || 'Pingava Alerts';
 
   if (!transporter) {
     console.log(`[Email Service] SMTP not configured. Notification to ${options.to} was queued in alert logs.`);
@@ -56,21 +57,25 @@ export async function sendEmailAlert(options: SendAlertOptions): Promise<{ succe
   }
 
   try {
-    const senderEmail = options.fromEmail || fromAddress;
-    const senderName = options.fromName || fromName;
+    const senderEmail = fromAddress;
+    const senderName = fromName;
     const info = await transporter.sendMail({
       from: `"${senderName}" <${senderEmail}>`,
       to: options.to,
-      replyTo: options.replyTo,
+      replyTo: options.replyTo || (senderEmail.includes('welcome') ? 'connect@pingava.com' : undefined),
       subject: options.subject,
       text: options.text,
       html: options.html,
+      headers: {
+        'X-Mailer': 'Pingava-Notification-Engine',
+        'Auto-Submitted': 'auto-generated',
+      },
     });
-    console.log(`[Email Service] Alert email sent successfully to ${options.to}: ${info.messageId}`);
+    console.log(`[Email Service] Email sent successfully to ${options.to}: ${info.messageId} (from: ${senderEmail})`);
     observability.recordEmailAttempt(true);
     return { success: true, messageId: info.messageId };
   } catch (err: any) {
-    console.error(`[Email Service] Failed to send alert email to ${options.to}:`, err);
+    console.error(`[Email Service] Failed to send email to ${options.to}:`, err);
     observability.recordEmailAttempt(false, err.message || 'Unknown SMTP error');
     return { success: false, error: err.message || 'Unknown SMTP error' };
   }

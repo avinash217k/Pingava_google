@@ -184,11 +184,12 @@ The following environment variables are maintained in `service.yaml`:
 | `PORT` | `3000` | Injected by Cloud Run. App listens on `process.env.PORT \|\| 3000`. |
 | `APP_URL` | `https://pingava-120461786326.asia-southeast1.run.app` | Canonical public URL used in alert emails and webhook payloads. |
 | `GEMINI_API_KEY` | `AQ.Ab8...` | API key for Gemini Root Cause Analysis and Post-Mortem generator. |
-| `SMTP_HOST` | `smtp-relay.brevo.com` | Brevo SMTP server host. |
-| `SMTP_PORT` | `587` | Brevo SMTP TLS port. |
-| `SMTP_USER` | `b827c6001@smtp-brevo.com` | Brevo account login. |
-| `SMTP_PASS` | `xsmtpsib-...` | Brevo SMTP API relay key. |
-| `SMTP_FROM` | `avinash217k@gmail.com` | Sender address authorized in Brevo. |
+| `SMTP_HOST` | `smtp.zeptomail.in` | Zoho ZeptoMail SMTP server host. |
+| `SMTP_PORT` | `587` | ZeptoMail TLS port (587) or SSL (465). |
+| `SMTP_USER` | `emailapikey` | ZeptoMail API account username. |
+| `SMTP_PASS` | `PHtE6r0...` | ZeptoMail Send Mail Token (API password). |
+| `SMTP_FROM` | `alerts@pingava.com` | Uptime & monitor alert sender address. |
+| `EMAIL_FROM` | `welcome@pingava.com` | Welcome, verification & password reset sender address. |
 | `ALERT_RETENTION_DAYS` | `90` | Number of days to retain incident logs and check histories. |
 
 ---
