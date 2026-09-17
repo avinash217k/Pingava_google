@@ -70,6 +70,8 @@ interface User {
   subscription_status?: 'active' | 'trialing' | 'canceled' | 'past_due';
   subscription_renews_at?: string;
   verification_token?: string | null;
+  handshake_token?: string | null;
+  handshake_token_expires_at?: number | null;
   is_verified?: boolean;
   reset_token?: string | null;
   reset_token_expires_at?: string | null;
@@ -1970,6 +1972,7 @@ welcome@pingava.com`;
     }
 
     const verificationToken = crypto.randomBytes(24).toString("hex");
+    const handshakeToken = crypto.randomBytes(32).toString("hex");
     const newUser: User = {
       id: users.length ? Math.max(...users.map(u => u.id)) + 1 : 1,
       name: String(name || "").trim() || normalizedEmail.split("@")[0] || "Workspace Member",
@@ -1979,6 +1982,8 @@ welcome@pingava.com`;
       auth_provider: "password",
       avatar_url: null,
       verification_token: verificationToken,
+      handshake_token: handshakeToken,
+      handshake_token_expires_at: Date.now() + 30 * 60 * 1000,
       is_verified: false,
       created_at: new Date().toISOString()
     };
@@ -2007,7 +2012,7 @@ welcome@pingava.com`;
       </div>`
     }).catch(err => console.warn("[Email Service] Verification email error:", err));
 
-    res.json({ message: "Verification link sent to your email.", email: newUser.email });
+    res.json({ message: "Verification link sent to your email.", email: newUser.email, handshake_token: handshakeToken });
   });
 
   app.get("/api/public/verify-email", (req, res) => {
@@ -2086,9 +2091,13 @@ welcome@pingava.com`;
 
     recentVerificationRequests.set(email, now);
     const user = users.find(u => u.email.toLowerCase() === email);
+    let handshakeToken: string | null = null;
     if (user) {
       const verificationToken = user.verification_token || crypto.randomBytes(24).toString("hex");
+      handshakeToken = user.handshake_token || crypto.randomBytes(32).toString("hex");
       user.verification_token = verificationToken;
+      user.handshake_token = handshakeToken;
+      user.handshake_token_expires_at = Date.now() + 30 * 60 * 1000;
       syncStateToFirestore();
 
       const appUrl = process.env.APP_URL || process.env.PUBLIC_APP_URL || "https://pingava.com";
@@ -2114,7 +2123,37 @@ welcome@pingava.com`;
         console.error("[Email Service] Resend verification error:", err);
       }
     }
-    res.json({ message: `Verification email resent to ${email || 'your email'}.` });
+    res.json({ message: `Verification email resent to ${email || 'your email'}.`, handshake_token: handshakeToken });
+  });
+
+  const verificationStatusRateLimiter = createAuthRateLimiter(60, 60 * 1000, "verification status check");
+
+  app.get("/api/auth/verification-status", verificationStatusRateLimiter, (req, res) => {
+    const token = String(req.query.token || "").trim();
+    if (!token || token.length < 16) {
+      return res.status(400).json({ detail: "Handshake token is required." });
+    }
+
+    const user = users.find(u => u.handshake_token && u.handshake_token === token);
+    if (!user || (user.handshake_token_expires_at && user.handshake_token_expires_at < Date.now())) {
+      return res.json({ verified: false, expired: true });
+    }
+
+    if (!user.is_verified) {
+      return res.json({ verified: false });
+    }
+
+    // Email was verified (e.g. on phone or in another tab)!
+    // Consume single-use handshake token and mint authenticated session cookie for this browser
+    user.handshake_token = null;
+    user.handshake_token_expires_at = null;
+    syncStateToFirestore();
+
+    res.clearCookie("pingava_logged_out", getCookieOptions());
+    res.cookie("session_user", `${user.email}:${user.token_version || 1}`, getCookieOptions({ signed: true, maxAge: 30 * 86400000 }));
+    const { password: _, ...safeUser } = user;
+    console.log(`[Auth Handoff] Live verification auto-login completed for user #${user.id} (${user.email})`);
+    res.json({ verified: true, user: safeUser, message: "Workspace activated successfully." });
   });
 
   app.post("/api/auth/forgot-password", forgotPasswordRateLimiter, async (req, res) => {

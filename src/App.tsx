@@ -92,6 +92,10 @@ function AuthScreen({ onAuth, initialMode = 'login' }: { onAuth: (user: User) =>
   const [showConfirmation, setShowConfirmation] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [verificationEmail, setVerificationEmail] = useState('')
+  const [handshakeToken, setHandshakeToken] = useState(() => {
+    try { return sessionStorage.getItem('pingava_handshake_token') || '' } catch { return '' }
+  })
+  const [handshakeActivated, setHandshakeActivated] = useState(false)
   const googleButton = useRef<HTMLDivElement>(null)
   const [googleClientId, setGoogleClientId] = useState<string>(
     () => "617326161009-qmjsi9aanmsa73e2qa0i4js0ak6l4fg3.apps.googleusercontent.com"
@@ -111,6 +115,67 @@ function AuthScreen({ onAuth, initialMode = 'login' }: { onAuth: (user: User) =>
       })
       .catch(() => {})
   }, [])
+
+  // Live Email Verification Handoff: Listen across tabs and poll backend while waiting for email verification
+  useEffect(() => {
+    if (!verificationEmail || !handshakeToken || handshakeActivated) return
+
+    let isMounted = true
+    let pollTimer: ReturnType<typeof setInterval> | null = null
+
+    const handleActivatedUser = (authedUser: User) => {
+      if (!isMounted || handshakeActivated) return
+      setHandshakeActivated(true)
+      try { sessionStorage.removeItem('pingava_handshake_token') } catch {}
+      identifyUser(authedUser.id, { auth_provider: authedUser.auth_provider })
+      trackEvent('user_signed_up_live_handoff', { signup_method: 'password' })
+      setTimeout(() => {
+        if (isMounted) {
+          onAuth(authedUser)
+        }
+      }, 750)
+    }
+
+    // 1. Instant cross-tab sync via BroadcastChannel (if verified in another tab on the same laptop)
+    let bc: BroadcastChannel | null = null
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        bc = new BroadcastChannel('pingava_auth')
+        bc.onmessage = (event) => {
+          if (event?.data?.type === 'EMAIL_VERIFIED' && event.data.user) {
+            handleActivatedUser(event.data.user)
+          }
+        }
+      }
+    } catch {}
+
+    // 2. Cross-device polling (if verified on phone, tablet, or another browser)
+    const checkStatus = async () => {
+      if (!isMounted || handshakeActivated) return
+      try {
+        const res = await api<{ verified: boolean; user?: User; expired?: boolean }>(
+          `/auth/verification-status?token=${encodeURIComponent(handshakeToken)}`
+        )
+        if (res.verified && res.user) {
+          handleActivatedUser(res.user)
+        }
+      } catch {
+        // Silently retry on next interval
+      }
+    }
+
+    // Initial check immediately, then every 2.5 seconds
+    void checkStatus()
+    pollTimer = setInterval(checkStatus, 2500)
+
+    return () => {
+      isMounted = false
+      if (pollTimer) clearInterval(pollTimer)
+      if (bc) {
+        try { bc.close() } catch {}
+      }
+    }
+  }, [verificationEmail, handshakeToken, handshakeActivated, onAuth])
 
   useEffect(() => {
     if (!googleClientId || mode === 'forgot') return
@@ -182,8 +247,12 @@ function AuthScreen({ onAuth, initialMode = 'login' }: { onAuth: (user: User) =>
         return
       }
       if (mode === 'register') {
-        const result = await api<{ message: string; email: string }>('/auth/register', { method: 'POST', body: JSON.stringify(values) })
+        const result = await api<{ message: string; email: string; handshake_token?: string }>('/auth/register', { method: 'POST', body: JSON.stringify(values) })
         setVerificationEmail(result.email)
+        if (result.handshake_token) {
+          setHandshakeToken(result.handshake_token)
+          try { sessionStorage.setItem('pingava_handshake_token', result.handshake_token) } catch {}
+        }
         trackEvent('signup_verification_sent', { signup_method: 'password' })
         return
       }
@@ -209,7 +278,7 @@ function AuthScreen({ onAuth, initialMode = 'login' }: { onAuth: (user: User) =>
   const clearFieldError = (name: string) => setFieldErrors((current) => { if (!current[name]) return current; const next = { ...current }; delete next[name]; return next })
   const passwordField = (name: 'password' | 'confirm_password', label: string, placeholder: string, visible: boolean, toggle: () => void) => <label htmlFor={`auth-${name}`}>{label}<span className="password-input"><input id={`auth-${name}`} name={name} type={visible ? 'text' : 'password'} required minLength={name === 'password' ? 8 : undefined} maxLength={128} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder={placeholder} aria-invalid={Boolean(fieldErrors[name])} aria-describedby={fieldErrors[name] ? `${name}-error` : undefined} onChange={() => clearFieldError(name)} /><button type="button" onClick={toggle} aria-label={`${visible ? 'Hide' : 'Show'} ${label.toLowerCase()}`}>{visible ? <EyeOff size={17} /> : <Eye size={17} />}</button></span>{fieldErrors[name] && <small className="field-error" id={`${name}-error`}>{fieldErrors[name]}</small>}</label>
 
-  if (verificationEmail) return <div className="auth-page"><PageMetadata /><section className="auth-brand"><BrandLockup /><div className="auth-message"><p>ONE QUICK STEP</p><h1>Your workspace is almost ready.</h1><span>Confirm your email, then Pingava can start watching the services that matter.</span></div></section><section className="auth-form-wrap"><div className="auth-form auth-confirmation"><CheckCircle2 size={34} /><div><h2>Check your inbox</h2><p>We sent a verification link to <strong>{verificationEmail}</strong>. It expires in 30 minutes.</p></div><button className="secondary-btn" disabled={loading} onClick={async () => { setLoading(true); setError(''); try { const result = await api<{ message: string }>('/auth/resend-verification', { method: 'POST', body: JSON.stringify({ email: verificationEmail }) }); setError(result.message) } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not resend verification') } finally { setLoading(false) } }}>{loading ? 'Sending...' : 'Resend verification email'}</button>{error && <div className="form-note">{error}</div>}<a href="/login" className="auth-switch">Return to sign in</a></div></section></div>
+  if (verificationEmail) return <div className="auth-page"><PageMetadata /><section className="auth-brand"><BrandLockup /><div className="auth-message"><p>{handshakeActivated ? 'WORKSPACE ACTIVATED' : 'ONE QUICK STEP'}</p><h1>{handshakeActivated ? 'Email verified! Welcome to Pingava.' : 'Your workspace is almost ready.'}</h1><span>{handshakeActivated ? 'Connecting you to your live monitoring fleet...' : 'Confirm your email, then Pingava can start watching the services that matter.'}</span></div></section><section className="auth-form-wrap"><div className="auth-form auth-confirmation">{handshakeActivated ? <CheckCircle2 size={40} color="#10b981" /> : <CheckCircle2 size={34} />}<div><h2>{handshakeActivated ? 'Account Verified!' : 'Check your inbox'}</h2><p>{handshakeActivated ? 'Your email has been successfully confirmed. Launching dashboard...' : <>We sent a verification link to <strong>{verificationEmail}</strong>. Tap the link on your phone or laptop to automatically enter your dashboard.</>}</p>{!handshakeActivated && <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 14px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: '20px', fontSize: '12px', color: '#34d399', margin: '14px 0 6px 0', fontWeight: 500 }}><span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 10px #10b981' }} /><span>Listening for verification...</span></div>}</div>{!handshakeActivated && <><button className="secondary-btn" disabled={loading} onClick={async () => { setLoading(true); setError(''); try { const result = await api<{ message: string; handshake_token?: string }>('/auth/resend-verification', { method: 'POST', body: JSON.stringify({ email: verificationEmail }) }); if (result.handshake_token) { setHandshakeToken(result.handshake_token); try { sessionStorage.setItem('pingava_handshake_token', result.handshake_token) } catch {} } setError(result.message) } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not resend verification') } finally { setLoading(false) } }}>{loading ? 'Sending...' : 'Resend verification email'}</button>{error && <div className="form-note">{error}</div>}<a href="/login" className="auth-switch" onClick={() => { try { sessionStorage.removeItem('pingava_handshake_token') } catch {} }}>Return to sign in</a></>}</div></section></div>
 
   return <div className="auth-page"><PageMetadata /><section className="auth-brand"><BrandLockup /><div className="auth-message"><p>WEBSITE &amp; API MONITORING</p><h1>Know before your users do.</h1><span>Monitor uptime, APIs and performance. Get alerted the moment something breaks.</span></div><div className="monitor-preview" aria-label="Live monitoring preview"><div className="monitor-preview-head"><span>Live services</span><strong><i />All operational</strong></div>{previewServices.map(([name, responseTime]) => <div className="monitor-preview-row" key={name}><i /><strong>{name}</strong><span>Operational</span><b>{responseTime}</b></div>)}</div></section><section className="auth-form-wrap"><form className="auth-form" onSubmit={submit} noValidate={mode === 'register'}><div><h2>{mode === 'register' ? 'Create your workspace' : mode === 'forgot' ? 'Reset your password' : 'Welcome back'}</h2><p>{mode === 'register' ? 'Start monitoring your first website or API in under 2 minutes.' : mode === 'forgot' ? 'We will email you a secure reset link.' : 'Sign in to view your monitors.'}</p></div>{mode === 'register' && queryTargetUrl && <div style={{ background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '8px', padding: '0.65rem 0.9rem', marginBottom: '1rem', fontSize: '0.84rem', color: '#7dd3fc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Zap size={15} color="#38bdf8" /><span>Target endpoint: <strong style={{ color: '#f8fafc' }}>{queryTargetUrl}</strong></span></div>}{googleClientId && mode !== 'forgot' && <><div className="google-signin" ref={googleButton} /><div className="auth-divider"><span>or continue with email</span></div></>}{mode === 'register' && <label htmlFor="auth-name">Full name<input id="auth-name" name="name" required minLength={2} maxLength={80} autoComplete="name" placeholder="Your full name" aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? 'name-error' : undefined} onChange={() => clearFieldError('name')} />{fieldErrors.name && <small className="field-error" id="name-error">{fieldErrors.name}</small>}</label>}<label htmlFor="auth-email">Email address<input id="auth-email" name="email" type="email" required autoComplete="email" placeholder="you@company.com" aria-invalid={Boolean(fieldErrors.email)} aria-describedby={fieldErrors.email ? 'email-error' : undefined} onChange={() => clearFieldError('email')} />{fieldErrors.email && <small className="field-error" id="email-error">{fieldErrors.email}</small>}</label>{mode !== 'forgot' && passwordField('password', 'Password', 'At least 8 characters', showPassword, () => setShowPassword((value) => !value))}{mode === 'register' && <>{passwordField('confirm_password', 'Confirm password', 'Re-enter your password', showConfirmation, () => setShowConfirmation((value) => !value))}<label className="terms-consent"><input name="terms" type="checkbox" aria-invalid={Boolean(fieldErrors.terms)} aria-describedby={fieldErrors.terms ? 'terms-error' : undefined} onChange={() => clearFieldError('terms')} /><span>I agree to the <a href="/terms-of-service">Terms of Service</a> and <a href="/privacy-policy">Privacy Policy</a></span>{fieldErrors.terms && <small className="field-error" id="terms-error">{fieldErrors.terms}</small>}</label></>}{notice && <div className="form-note">{notice}</div>}{error && <div className="form-error">{error}</div>}<button className="primary-btn auth-submit" disabled={loading}>{loading ? 'Please wait...' : mode === 'register' ? 'Create free account \u2192' : mode === 'forgot' ? 'Send reset link' : 'Sign in'}</button>{mode === 'register' && <p className="auth-reassurance">No credit card required</p>}{mode === 'login' && <button type="button" className="auth-switch" onClick={() => { setMode('forgot'); setError(''); setNotice(''); setFieldErrors({}) }}>Forgot password?</button>}<button type="button" className="auth-switch" onClick={() => { setMode(mode === 'register' ? 'login' : mode === 'login' ? 'register' : 'login'); setError(''); setNotice(''); setFieldErrors({}) }}>{mode === 'register' ? 'Already have an account? Sign in' : mode === 'forgot' ? 'Back to sign in' : 'New to Pingava? Create an account'}</button></form></section></div>
 }
@@ -224,6 +293,13 @@ function SignupEmailConfirmation({ token }: { token: string }) {
     api<{ user: User; message: string }>(`/public/verify-email?token=${encodeURIComponent(token)}`).then((result) => {
       identifyUser(result.user.id, { auth_provider: result.user.auth_provider })
       trackEvent('user_signed_up', { signup_method: 'password' })
+      try {
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          const bc = new BroadcastChannel('pingava_auth')
+          bc.postMessage({ type: 'EMAIL_VERIFIED', user: result.user })
+          bc.close()
+        }
+      } catch {}
       setState({ message: result.message, ok: true })
     }).catch((reason) => setState({ message: userFacingError(reason, 'This verification link is invalid or has expired.'), ok: false }))
   }, [token])

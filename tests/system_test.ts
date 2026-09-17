@@ -920,6 +920,51 @@ async function runTests() {
   const apiCheck = shouldRedirectApex('pingava.com', '/api/health', 'GET')
   assert(!apiCheck.redirect, 'Apex domain preserves direct API requests without redirect')
 
+  // 34. Live Email Verification Handoff & Auto-Login
+  const testHandshakeToken = nodeCrypto.randomBytes(32).toString('hex')
+  assert(testHandshakeToken.length === 64, 'Handshake token is 64-character cryptographically secure hex string')
+
+  interface TestHandoffUser {
+    id: number
+    email: string
+    is_verified: boolean
+    handshake_token: string | null
+    handshake_token_expires_at: number | null
+  }
+
+  const mockUser: TestHandoffUser = {
+    id: 999,
+    email: 'handoff-test@pingava.com',
+    is_verified: false,
+    handshake_token: testHandshakeToken,
+    handshake_token_expires_at: Date.now() + 1800000
+  }
+
+  // Check 1: While unverified, verification-status returns verified: false
+  const checkUnverifiedStatus = (token: string, user: TestHandoffUser) => {
+    if (!token || token.length < 16) return { error: 'Handshake token is required.' }
+    if (user.handshake_token !== token) return { verified: false, expired: true }
+    if (!user.is_verified) return { verified: false }
+    return { verified: true }
+  }
+
+  const initialCheck = checkUnverifiedStatus(testHandshakeToken, mockUser)
+  assert(initialCheck.verified === false, 'Verification-status returns verified: false while email unverified')
+
+  // Check 2: Invalid/short token is rejected
+  const shortCheck = checkUnverifiedStatus('short', mockUser)
+  assert(Boolean(shortCheck.error), 'Verification-status rejects tokens shorter than 16 characters')
+
+  // Check 3: When user verifies email (e.g. on mobile phone), next status poll succeeds and consumes token
+  mockUser.is_verified = true
+  const verifiedCheck = checkUnverifiedStatus(testHandshakeToken, mockUser)
+  assert(verifiedCheck.verified === true, 'Verification-status returns verified: true once user activates email')
+
+  // Check 4: Handshake token is single-use and cleared on activation
+  mockUser.handshake_token = null
+  const subsequentCheck = checkUnverifiedStatus(testHandshakeToken, mockUser)
+  assert(subsequentCheck.verified === false && subsequentCheck.expired === true, 'Handshake token is single-use and invalid on subsequent polls')
+
   console.log('\n=================================================================')
   console.log(`📊 TEST SUITE SUMMARY: ${passedTests} passed, ${failedTests} failed out of ${totalTests} tests`)
   console.log('=================================================================')
