@@ -100,6 +100,8 @@ export type StatusPage = {
   published?: boolean;
   email_subscriptions_enabled?: boolean;
   logo_url?: string | null;
+  custom_domain?: string | null;
+  cname_verified?: boolean;
   overall_status: 'up' | 'down' | 'pending';
   monitors: (Pick<Monitor, 'id' | 'name' | 'status' | 'uptime' | 'last_checked_at'> & { public_name?: string | null; status_page_order?: number })[];
   incidents: Incident[];
@@ -367,7 +369,9 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     const err: any = new Error(data.detail || data.error || 'Request failed')
     if (data.unverified) err.unverified = true
     if (data.email) err.email = data.email
+    if (data.not_found) err.not_found = true
     if (requestId) err.requestId = requestId
+    err.status = response.status
     throw err
   }
   return data as T
@@ -650,3 +654,39 @@ export function normalizeEndpointUrl(rawUrl: string): string {
   return url;
 }
 
+export type SslFleetOverview = {
+  total_https: number;
+  valid_count: number;
+  expiring_soon_count: number;
+  critical_count: number;
+  expired_count: number;
+  error_count: number;
+  scanned_count?: number;
+  monitors: {
+    id: number;
+    name: string;
+    url: string;
+    ssl_status: string;
+    ssl_days_remaining: number | null;
+    ssl_expires_at: string | null;
+    ssl_issuer: string | null;
+    ssl_protocol: string | null;
+    ssl_last_checked_at: string | null;
+    ssl_error: string | null;
+    alert_on_ssl_expiry: boolean;
+  }[];
+}
+
+export async function verifyStatusPageCname(domain: string) {
+  return api<{ verified: boolean; cnameRecords: string[]; target: string; error?: string }>(
+    `/status-page/verify-cname?domain=${encodeURIComponent(domain)}`
+  );
+}
+
+export async function getSslFleetOverview() {
+  return api<SslFleetOverview>('/ssl/fleet');
+}
+
+export async function scanSslFleet() {
+  return api<SslFleetOverview>('/ssl/scan', { method: 'POST' });
+}

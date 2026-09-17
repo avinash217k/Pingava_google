@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bell, Check, CreditCard, ExternalLink, KeyRound, LockKeyhole, LogOut, Mail, Save, ShieldCheck, Trash2, UserRound } from 'lucide-react'
+import { Bell, Check, ExternalLink, KeyRound, LockKeyhole, LogOut, Mail, Save, ShieldCheck, Sparkles, Trash2, UserRound } from 'lucide-react'
 import { api, userFacingError, type Monitor, type User } from './api'
 import { UserAvatar } from './UserAvatar'
 import { useTheme, type ThemeMode } from './ThemeContext'
@@ -12,7 +12,7 @@ const tabs = [
   { id: 'profile' as const, label: 'Profile', icon: UserRound },
   { id: 'security' as const, label: 'Security', icon: LockKeyhole },
   { id: 'notifications' as const, label: 'Notifications', icon: Bell },
-  { id: 'billing' as const, label: 'Plan & Billing', icon: CreditCard },
+  { id: 'billing' as const, label: 'Plan & Early Access', icon: Sparkles },
 ]
 
 export function AccountSettings({ user, monitors, limit, activeTab, onTabChange, onUserChange, onRefresh, onLogout }: { user: User; monitors: Monitor[]; limit: number; activeTab: SettingsTab; onTabChange: (tab: SettingsTab) => void; onUserChange: (user: User) => void; onRefresh: () => Promise<void>; onLogout: () => void }) {

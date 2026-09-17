@@ -567,3 +567,119 @@ main { min-width: 0; }
   .auth-message h1, .auth-message span { width: 100%; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
   .monitor-preview { max-width: 100%; }
 }
+
+/* Running Popup Toast (Upper Right) */
+@keyframes toastSlideInRight {
+  0% {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes toastRunningBarShrink {
+  0% {
+    width: 100%;
+  }
+  100% {
+    width: 0%;
+  }
+}
+
+.running-popup-wrap {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 99999;
+  max-width: 380px;
+  width: calc(100vw - 48px);
+  pointer-events: none;
+}
+
+.running-popup {
+  position: relative;
+  pointer-events: auto;
+  background: #180b0b;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6), 0 0 24px rgba(239, 68, 68, 0.15);
+  border-radius: 12px;
+  padding: 14px 16px 16px 16px;
+  color: #f8fafc;
+  overflow: hidden;
+  animation: toastSlideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.running-popup-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.running-popup-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+
+.running-popup-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.running-popup-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #f87171;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.running-popup-text {
+  margin: 4px 0 0 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: #fca5a5;
+  word-break: break-word;
+}
+
+.running-popup-close {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.running-popup-close:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.running-popup-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #ef4444, #f87171);
+  animation: toastRunningBarShrink 4.5s linear forwards;
+}
+

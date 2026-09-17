@@ -122,7 +122,7 @@ export function ModernLandingPage() {
           <span><Sparkles size={16} style={{ color: '#34d399' }} /> AI Diagnostics</span>
           <span><Radar size={16} style={{ color: '#60a5fa' }} /> Predictive Jitter Radar</span>
           <span><Lock size={16} /> SSL Expiry Guardian</span>
-          <span><Bell size={16} /> $0 / Free Tier</span>
+          <span><Bell size={16} /> 100% Free Early Access</span>
         </div>
       </section>
 
@@ -1395,11 +1395,11 @@ export function ModernLandingPage() {
       <section id="pricing" className="modern-pricing-comparison-section">
         <div style={{ textAlign: 'center' }}>
           <div className="modern-section-pill">
-            <Zap size={14} /> Unbeatable Value
+            <Sparkles size={14} /> Early Access Launch
           </div>
-          <h2 className="modern-section-title">50% to 70% more cost-effective than legacy tools</h2>
+          <h2 className="modern-section-title">100% Free During Public Launch. Paid Plans Coming Soon.</h2>
           <p className="modern-section-desc">
-            Stop paying $15 for only 10 monitors. Pingava gives you higher check frequency, 6 global edge regions, and built-in AI diagnostics for less.
+            Why pay $15 for only 10 monitors on legacy platforms? Pingava is 100% free during our early access period while merchant payment processing is being finalized. Get multi-region edge inspection, SSL expiry tracking, and zero false alarms without entering a credit card.
           </p>
         </div>
 
@@ -1409,13 +1409,13 @@ export function ModernLandingPage() {
               <tr>
                 <th>Feature / Capability</th>
                 <th className="highlight-col">
-                  <strong>Pingava Solo</strong>
-                  <span className="price-tag">$9 / mo</span>
+                  <strong>Pingava Early Access</strong>
+                  <span className="price-tag" style={{ color: '#10b981' }}>$0 / Free Forever</span>
                 </th>
                 <th className="highlight-col-pro">
-                  <span className="pro-badge">MOST POPULAR</span>
-                  <strong>Pingava Pro</strong>
-                  <span className="price-tag">$15 / mo</span>
+                  <span className="pro-badge">COMING SOON</span>
+                  <strong>Pingava Pro Tiers</strong>
+                  <span className="price-tag" style={{ color: '#38bdf8' }}>Paid Plans Coming Soon</span>
                 </th>
                 <th>
                   <span>Pingdom</span>
@@ -1434,16 +1434,16 @@ export function ModernLandingPage() {
             <tbody>
               <tr>
                 <td>Synthetic Monitors Included</td>
-                <td className="highlight-col font-bold">20 Monitors</td>
-                <td className="highlight-col-pro font-bold">60 Monitors</td>
+                <td className="highlight-col font-bold">10 Monitors (Free)</td>
+                <td className="highlight-col-pro font-bold">60+ Monitors</td>
                 <td>10 Monitors</td>
                 <td>10 Monitors</td>
                 <td>50 Monitors</td>
               </tr>
               <tr>
                 <td>Cost per Monitor</td>
-                <td className="highlight-col text-emerald font-bold">$0.45 / mon</td>
-                <td className="highlight-col-pro text-emerald font-bold">$0.25 / mon</td>
+                <td className="highlight-col text-emerald font-bold">$0.00 (100% Free)</td>
+                <td className="highlight-col-pro text-emerald font-bold">Early Adopter Perks</td>
                 <td>$1.50 / mon</td>
                 <td>$0.80 / mon</td>
                 <td>$0.58 / mon</td>

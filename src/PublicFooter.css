@@ -29,6 +29,12 @@
 .public-footer-social { display: flex; align-items: center; gap: 8px; }
 .public-footer-social a, .public-footer-social > span { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 7px; color: var(--muted-foreground); background: var(--surface); transition: transform .15s ease, color .15s ease, border-color .15s ease, background-color .15s ease; }
 .public-footer-social > span, .public-footer-muted { cursor: default; }
+.public-footer-badges { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+.public-footer-badges-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-foreground); opacity: 0.85; margin: 0; }
+.public-footer-badges-list { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.public-footer-badges-list a { display: inline-flex; align-items: center; border-radius: 8px; transition: transform .18s ease, filter .18s ease, opacity .18s ease; line-height: 0; }
+.public-footer-badges-list a:hover { transform: translateY(-2px); filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.22)); }
+.public-footer-badges-list img { display: inline-block; border: 0; width: 100%; max-width: 180px; height: auto; max-height: 65px; border-radius: 6px; }
 .public-footer-main nav { display: flex; align-items: flex-start; flex-direction: column; gap: 2px; }
 .public-footer-main h2, .public-footer-newsletter h2 { margin: 0 0 7px; color: var(--foreground); font: 800 14px 'Manrope', sans-serif; letter-spacing: 0; }
 .public-footer-main nav a, .public-footer-main nav > span { color: var(--muted-foreground); font-size: 12px; line-height: 1.4; min-height: 32px; display: inline-flex; align-items: center; text-decoration: none; }

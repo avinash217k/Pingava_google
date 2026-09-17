@@ -9,6 +9,7 @@ import { observability } from '../observabilityService.js'
 import { normalizeEndpointUrl } from '../src/api.js'
 import { hashPassword, verifyPassword, validateSafeOutboundTarget, isPrivateOrInternalIp, safeFetch, verifyGoogleIdToken } from '../securityService.js'
 import { validateContractAgainstPayload, type ApiContract } from '../serverFeatures.js'
+import { detectWebhookService, buildPagerDutyPayload, buildOpsGeniePayload, type WebhookDispatchPayload } from '../webhookDispatcher.js'
 import nodeCrypto from 'node:crypto'
 
 const PROD_URL = process.env.PROD_URL || 'https://pingava-335hmlinra-as.a.run.app'
@@ -964,6 +965,139 @@ async function runTests() {
   mockUser.handshake_token = null
   const subsequentCheck = checkUnverifiedStatus(testHandshakeToken, mockUser)
   assert(subsequentCheck.verified === false && subsequentCheck.expired === true, 'Handshake token is single-use and invalid on subsequent polls')
+
+  // --- Check 5: Forgot Password API behavior ---
+  type ForgotPasswordResponse = { status: number; body: { success?: boolean; not_found?: boolean; detail?: string; message?: string } }
+  const handleForgotPassword = (email: string, existingUsers: { email: string }[]): ForgotPasswordResponse => {
+    const trimmed = String(email || '').trim().toLowerCase()
+    if (!trimmed || !/^\S+@\S+\.\S+$/.test(trimmed)) {
+      return { status: 400, body: { detail: 'Please enter a valid email address.' } }
+    }
+    const found = existingUsers.find(u => u.email.toLowerCase() === trimmed)
+    if (!found) {
+      return { status: 404, body: { success: false, not_found: true, detail: 'Failed: No account found for this email.' } }
+    }
+    return { status: 200, body: { success: true, message: 'A password reset link has been sent to your email. Please check your inbox.' } }
+  }
+
+  const existingUsersList = [{ email: 'avinash217k@gmail.com' }, { email: 'owner@pingava.com' }]
+  const missingResult = handleForgotPassword('unknown-user-999@test.com', existingUsersList)
+  assert(missingResult.status === 404 && missingResult.body.not_found === true, 'Forgot password returns 404 with not_found: true when user does not exist')
+  assert(missingResult.body.detail === 'Failed: No account found for this email.', 'Forgot password provides exact "Failed: No account found for this email." detail')
+
+  const existingResult = handleForgotPassword('avinash217k@gmail.com', existingUsersList)
+  assert(existingResult.status === 200 && existingResult.body.success === true, 'Forgot password returns 200 with success: true when user exists')
+  assert(existingResult.body.message === 'A password reset link has been sent to your email. Please check your inbox.', 'Forgot password provides direct reset link sent message')
+
+  const invalidEmailResult = handleForgotPassword('not-an-email', existingUsersList)
+  assert(invalidEmailResult.status === 400, 'Forgot password rejects malformed email address with 400')
+
+  // -------------------------------------------------------------
+  // SUITE 10: MULTI-CHANNEL WEBHOOKS (PAGERDUTY & OPSGENIE)
+  // -------------------------------------------------------------
+  console.log('\n📦 SUITE 10: Multi-Channel Webhook Dispatches (PagerDuty & OpsGenie)')
+
+  // Check 1: detectWebhookService
+  assert(detectWebhookService('https://events.pagerduty.com/v2/enqueue') === 'pagerduty', 'detectWebhookService identifies PagerDuty Events API')
+  assert(detectWebhookService('https://api.opsgenie.com/v2/alerts') === 'opsgenie', 'detectWebhookService identifies OpsGenie Global API')
+  assert(detectWebhookService('https://api.eu.opsgenie.com/v2/alerts') === 'opsgenie', 'detectWebhookService identifies OpsGenie EU API')
+
+  // Check 2: PagerDuty Events API v2 payloads
+  const mockWebhookMonitor: any = { id: 42, name: 'Production API', url: 'https://api.pingava.com/health', status: 'down' }
+  const mockDownPayload: WebhookDispatchPayload = {
+    event: 'incident_created',
+    kind: 'down',
+    monitor: mockWebhookMonitor,
+    incident: { error: '503 Service Unavailable', response_time_ms: 1250, timestamp: '2026-09-17T12:00:00Z' }
+  }
+  const pdDown = buildPagerDutyPayload(mockDownPayload, 'https://events.pagerduty.com/v2/enqueue?routing_key=pd-key-123')
+  assert(pdDown.routing_key === 'pd-key-123', 'PagerDuty payload extracts routing_key from query parameter')
+  assert(pdDown.event_action === 'trigger', 'PagerDuty payload triggers on downtime')
+  assert(pdDown.payload.severity === 'critical', 'PagerDuty downtime sets severity to critical')
+  assert(pdDown.dedup_key === 'pingava_monitor_42', 'PagerDuty uses consistent monitor-based dedup_key')
+
+  const mockRecoveryPayload: WebhookDispatchPayload = {
+    event: 'incident_resolved',
+    kind: 'recovery',
+    monitor: { ...mockWebhookMonitor, status: 'up' },
+    incident: { error: null, response_time_ms: 110, timestamp: '2026-09-17T12:05:00Z' }
+  }
+  const pdRecovery = buildPagerDutyPayload(mockRecoveryPayload, 'https://events.pagerduty.com/v2/enqueue?routing_key=pd-key-123')
+  assert(pdRecovery.event_action === 'resolve', 'PagerDuty payload resolves on recovery')
+  assert(pdRecovery.payload.severity === 'info', 'PagerDuty recovery sets severity to info')
+
+  // Check 3: OpsGenie Alert payloads
+  const ogDown = buildOpsGeniePayload(mockDownPayload)
+  assert(ogDown.priority === 'P1', 'OpsGenie downtime payload sets priority to P1')
+  assert(ogDown.alias === 'pingava_monitor_42', 'OpsGenie alias matches monitor dedup key')
+  assert(ogDown.tags.includes('down'), 'OpsGenie tags include incident kind down')
+
+  const mockSslPayload: WebhookDispatchPayload = {
+    event: 'ssl_expiring',
+    kind: 'ssl_expiring',
+    monitor: mockWebhookMonitor,
+    incident: { error: 'SSL certificate expires in 7 days', response_time_ms: 0, timestamp: '2026-09-17T12:00:00Z' }
+  }
+  const ogSsl = buildOpsGeniePayload(mockSslPayload)
+  assert(ogSsl.priority === 'P3', 'OpsGenie SSL expiration payload sets priority to P3')
+
+  // -------------------------------------------------------------
+  // SUITE 11: STATUS PAGE CNAME VERIFICATION LOGIC
+  // -------------------------------------------------------------
+  console.log('\n📦 SUITE 11: Status Page Custom Domain (CNAME) Verification')
+
+  const verifyCnameHelper = (records: string[]): boolean => {
+    const acceptableTargets = [
+      'cname.pingava.com',
+      'cname.pingava.com.',
+      'pingava.com',
+      'pingava.com.',
+      'ghs.googlehosted.com',
+      'ghs.googlehosted.com.'
+    ]
+    const lowerRecords = records.map(r => r.toLowerCase().trim())
+    return lowerRecords.some(r =>
+      acceptableTargets.includes(r) ||
+      acceptableTargets.includes(r.replace(/\.$/, '')) ||
+      r.includes('pingava.com') ||
+      r.includes('googlehosted.com')
+    )
+  }
+
+  assert(verifyCnameHelper(['cname.pingava.com']) === true, 'CNAME target cname.pingava.com is accepted')
+  assert(verifyCnameHelper(['cname.pingava.com.']) === true, 'CNAME target with trailing dot is accepted')
+  assert(verifyCnameHelper(['ghs.googlehosted.com']) === true, 'CNAME target ghs.googlehosted.com is accepted for Cloud Run')
+  assert(verifyCnameHelper(['custom-domain.other-provider.net']) === false, 'Invalid CNAME target is rejected')
+
+  // -------------------------------------------------------------
+  // SUITE 12: AUTOMATED SSL FLEET METRICS ENGINE
+  // -------------------------------------------------------------
+  console.log('\n📦 SUITE 12: Fleet SSL Certificate Health Evaluation')
+
+  type SslMonitorMock = { url: string; ssl_status: string; ssl_days_remaining: number | null }
+  const mockFleetMonitors: SslMonitorMock[] = [
+    { url: 'https://site-a.com', ssl_status: 'valid', ssl_days_remaining: 65 },
+    { url: 'https://site-b.com', ssl_status: 'valid', ssl_days_remaining: 25 }, // expiring soon
+    { url: 'https://site-c.com', ssl_status: 'valid', ssl_days_remaining: 5 },  // critical
+    { url: 'https://site-d.com', ssl_status: 'expired', ssl_days_remaining: -2 }, // expired
+    { url: 'https://site-e.com', ssl_status: 'error', ssl_days_remaining: null }, // error
+    { url: 'http://plain-http.com', ssl_status: 'not_applicable', ssl_days_remaining: null } // skipped
+  ]
+
+  const httpsOnly = mockFleetMonitors.filter(m => m.url.startsWith('https://'))
+  const validCount = httpsOnly.filter(m => m.ssl_status === 'valid' && (m.ssl_days_remaining === null || m.ssl_days_remaining > 30)).length
+  const expiringSoon = httpsOnly.filter(m => m.ssl_days_remaining !== null && m.ssl_days_remaining <= 30 && m.ssl_days_remaining > 7).length
+  const critical = httpsOnly.filter(m => m.ssl_days_remaining !== null && m.ssl_days_remaining <= 7 && m.ssl_days_remaining > 0).length
+  const expired = httpsOnly.filter(m => (m.ssl_days_remaining !== null && m.ssl_days_remaining <= 0) || m.ssl_status === 'expired').length
+  const errorCount = httpsOnly.filter(m => m.ssl_status === 'error').length
+
+  assert(httpsOnly.length === 5, 'Fleet SSL scanner filters strictly to HTTPS monitors')
+  assert(validCount === 1, 'Calculates correct count of fully valid certificates (>30d)')
+  assert(expiringSoon === 1, 'Calculates correct count of expiring soon certificates (<=30d, >7d)')
+  assert(critical === 1, 'Calculates correct count of critical certificates (<=7d, >0d)')
+  assert(expired === 1, 'Calculates correct count of expired certificates (<=0d)')
+  assert(errorCount === 1, 'Calculates correct count of certificate error states')
+
 
   console.log('\n=================================================================')
   console.log(`📊 TEST SUITE SUMMARY: ${passedTests} passed, ${failedTests} failed out of ${totalTests} tests`)

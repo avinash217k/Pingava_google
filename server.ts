@@ -35,6 +35,20 @@ import {
   deleteUserFromSupabase,
 } from "./supabaseService";
 import { sendEmailAlert } from "./emailService";
+import {
+  renderSignupVerificationEmail,
+  renderPasswordResetEmail,
+  renderWelcomeEmail,
+  renderMonitorAlertEmail,
+  renderSslExpiryAlertEmail,
+  renderHeartbeatAlertEmail,
+  renderTestAlertEmail,
+  renderEmailChangeConfirmEmail,
+  renderEmailChangeSecurityAlertEmail,
+  renderMetaGuardianAlertEmail,
+  renderContactInquiryAckEmail,
+  renderTeamInquiryAlertEmail,
+} from "./emailTemplates";
 import { dispatchWebhook, detectWebhookService } from "./webhookDispatcher";
 import { checkSslCertificate } from "./sslService";
 import dns from "node:dns";
@@ -515,30 +529,9 @@ export const COMPETITOR_COMPARISON_MATRIX = [
   }
 ];
 
-const userInvoices: UserInvoice[] = [
-  {
-    id: 'inv_init_1',
-    user_id: 1,
-    invoice_number: 'INV-2026-0042',
-    date: new Date(now - 12 * 86400000).toISOString(),
-    amount_usd: 15.00,
-    plan_id: 'pro',
-    plan_name: 'Pro',
-    billing_cycle: 'monthly',
-    status: 'paid',
-    pdf_available: true,
-  }
-];
+const userInvoices: UserInvoice[] = [];
 
-const userPaymentMethods: Record<number, UserPaymentMethod> = {
-  1: {
-    brand: 'Visa',
-    last4: '4242',
-    exp_month: 12,
-    exp_year: 2028,
-    cardholder_name: 'Avinash K'
-  }
-};
+const userPaymentMethods: Record<number, UserPaymentMethod> = {};
 
 function parseGoogleCredential(credential?: string): { email?: string; name?: string } {
   if (!credential || typeof credential !== 'string') return {};
@@ -580,10 +573,10 @@ let users: User[] = [
     auth_provider: "password",
     avatar_url: null,
     created_at: new Date(now - 30 * 86400000).toISOString(),
-    plan: "pro",
-    billing_cycle: "monthly",
+    plan: "free",
+    billing_cycle: "free",
     subscription_status: "active",
-    subscription_renews_at: new Date(now + 18 * 86400000).toISOString(),
+    subscription_renews_at: null,
     token_version: 1
   }
 ];
@@ -957,7 +950,9 @@ let statusPageConfig = {
   description: "Live service availability and incident updates.",
   published: true,
   email_subscriptions_enabled: true,
-  logo_url: null as string | null
+  logo_url: null as string | null,
+  custom_domain: null as string | null,
+  cname_verified: false
 };
 
 type StatusSubscriber = {
@@ -1114,7 +1109,7 @@ let heartbeatPings: HeartbeatPing[] = [
   }
 ];
 
-function syncStateToFirestore() {
+function syncStateToFirestore(isCriticalMutation = true) {
   const payload: PersistentStoreState = {
     monitors,
     checks,
@@ -1128,7 +1123,7 @@ function syncStateToFirestore() {
     heartbeats,
     heartbeatPings,
   };
-  scheduleStateSaveToFirestore(payload);
+  scheduleStateSaveToFirestore(payload, isCriticalMutation);
   scheduleStateSaveToSupabase(payload);
 }
 
@@ -1347,20 +1342,17 @@ async function startServer() {
     logger.warn(`[Meta-Guardian] Dispatched watchdog alert to owner: ${alert.title}`, { alert });
 
     // 1. Send via Brevo SMTP
+    const emailData = renderMetaGuardianAlertEmail({
+      title: alert.title,
+      message: alert.message,
+      revision: process.env.K_REVISION || 'local',
+      timestamp: new Date().toISOString(),
+    });
     await sendEmailAlert({
       to: ownerEmail,
       subject: `🚨 ${alert.title}`,
-      text: `${alert.message}\n\nTime: ${new Date().toISOString()}\nRevision: ${process.env.K_REVISION || 'local'}\nDashboard: https://dashboard.pingava.com/observability`,
-      html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px; background: #0f172a; color: #f8fafc; border-radius: 10px; max-width: 600px; border: 1px solid #334155;">
-        <h2 style="color: #ef4444; margin: 0 0 12px 0;">🛡️ Pingava Meta-Guardian Alert</h2>
-        <p style="font-size: 15px; color: #cbd5e1; margin: 0 0 16px 0;"><strong>${alert.title}</strong></p>
-        <div style="background: #1e293b; border-left: 4px solid #ef4444; padding: 14px; border-radius: 4px; font-family: monospace; font-size: 13px; color: #fca5a5; white-space: pre-wrap; margin-bottom: 20px;">${alert.message}</div>
-        <div style="font-size: 12px; color: #94a3b8; margin-bottom: 20px;">
-          <div>Cloud Run Revision: <code>${process.env.K_REVISION || 'local'}</code></div>
-          <div>Timestamp: <code>${new Date().toISOString()}</code></div>
-        </div>
-        <a href="https://dashboard.pingava.com/observability" style="background: #3b82f6; color: #ffffff; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-weight: 600; display: inline-block;">Open Observability Dashboard</a>
-      </div>`
+      text: emailData.text,
+      html: emailData.html,
     }).catch(() => {});
 
     // 2. Transmit to active webhooks if configured
@@ -1649,180 +1641,15 @@ async function startServer() {
 
   // Helper to send modern welcome email from welcome@pingava.com on user's first login
   const sendWelcomeEmail = async (user: User): Promise<void> => {
-    const sanitize = (str: string): string => {
-      return String(str || "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    };
-
     const rawName = (user.name || "").trim();
     const firstName = rawName.split(" ")[0] || "there";
     const userEmail = user.email.toLowerCase().trim();
 
-    const textContent = `Welcome to Pingava, ${firstName}!
-
-Your Pingava workspace is activated. You now have access to our modern synthetic monitoring suite built for engineering teams who need to reduce false alarms, predictive latency detection, and instant root-cause clarity.
-
-Add your first monitor:
-https://dashboard.pingava.com/monitors
-
-Quick 3-Step Setup:
-1. Add Target URL: Configure your production website, microservice, or REST API endpoint.
-2. Set Confirmation Rules: Use 2-to-3 consecutive check failures to prevent false alerts from temporary internet hiccups.
-3. Connect Alert Channels: Receive instant notifications via email, webhook, Slack, or PagerDuty.
-
-What makes Pingava different:
-• 6-Region Global Edge Probes (Singapore, Tokyo, Frankfurt, N. Virginia, São Paulo, Sydney)
-• AI Root-Cause Synthesis on incidents
-• Predictive Latency Jitter Radar & SSL Expiry Hygiene
-• Branded Public Status Pages for transparent user communication
-
-Have questions or need assistance? Reply directly to this email or reach us anytime at connect@pingava.com.
-
-Best regards,
-The Pingava Team
-https://pingava.com
-welcome@pingava.com`;
-
-    const htmlContent = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Welcome to Pingava</title>
-</head>
-<body style="margin: 0; padding: 0; background-color: #0b1324; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
-  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #0b1324; padding: 40px 15px;">
-    <tr>
-      <td align="center">
-        <!-- Main Container Card -->
-        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 620px; background-color: #111a2e; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; overflow: hidden; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);">
-          
-          <!-- Brand Header Bar -->
-          <tr>
-            <td style="padding: 32px 36px 24px; background: linear-gradient(180deg, rgba(8, 122, 75, 0.2) 0%, rgba(17, 26, 46, 0) 100%); border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
-              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
-                <tr>
-                  <td>
-                    <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.03em; color: #12b76a; text-transform: lowercase;">pingava</h1>
-                    <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #94a3b8; display: inline-block; margin-top: 4px;">Next-Gen Synthetic Reliability Suite</span>
-                  </td>
-                  <td align="right">
-                    <span style="display: inline-block; background: rgba(18, 183, 106, 0.15); border: 1px solid rgba(18, 183, 106, 0.35); color: #34d399; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.05em;">Workspace Activated</span>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-          <!-- Welcome Hero Content -->
-          <tr>
-            <td style="padding: 32px 36px 20px;">
-              <h2 style="margin: 0 0 12px; font-size: 22px; font-weight: 700; color: #ffffff; letter-spacing: -0.02em;">Welcome aboard, ${sanitize(firstName)}! 👋</h2>
-              <p style="margin: 0 0 20px; font-size: 15px; line-height: 1.65; color: #cbd5e1;">
-                Your Pingava workspace is ready. You now have access to a modern synthetic monitoring suite built for engineering teams who need <strong>fewer false alarms</strong>, predictive latency detection, and instant root-cause clarity before outages impact users.
-              </p>
-
-              <!-- Primary CTA Button -->
-              <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin: 26px 0 32px;">
-                <tr>
-                  <td align="center" style="border-radius: 8px; background: #087a4b;">
-                    <a href="https://dashboard.pingava.com/monitors" target="_blank" style="font-size: 15px; font-weight: 700; color: #ffffff; text-decoration: none; padding: 13px 28px; display: inline-block; border-radius: 8px; background: #087a4b; border: 1px solid #10b981; letter-spacing: 0.01em;">
-                      Add Your First Monitor &rarr;
-                    </a>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Setup Steps -->
-              <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 10px; padding: 20px 22px; margin-bottom: 28px;">
-                <h3 style="margin: 0 0 14px; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #34d399;">Quick 3-Step Setup</h3>
-                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
-                  <tr>
-                    <td valign="top" style="padding-bottom: 12px; width: 28px;">
-                      <span style="display: inline-block; width: 20px; height: 20px; border-radius: 50%; background: rgba(18, 183, 106, 0.2); color: #34d399; font-size: 11px; font-weight: 700; text-align: center; line-height: 20px;">1</span>
-                    </td>
-                    <td style="padding-bottom: 12px; font-size: 14px; line-height: 1.5; color: #e2e8f0;">
-                      <strong>Add Target URL:</strong> Configure your production website, microservice, or REST API endpoint.
-                    </td>
-                  </tr>
-                  <tr>
-                    <td valign="top" style="padding-bottom: 12px; width: 28px;">
-                      <span style="display: inline-block; width: 20px; height: 20px; border-radius: 50%; background: rgba(18, 183, 106, 0.2); color: #34d399; font-size: 11px; font-weight: 700; text-align: center; line-height: 20px;">2</span>
-                    </td>
-                    <td style="padding-bottom: 12px; font-size: 14px; line-height: 1.5; color: #e2e8f0;">
-                      <strong>Set Confirmation Rules:</strong> Use 2-to-3 consecutive check failures to prevent false alerts from temporary internet hiccups.
-                    </td>
-                  </tr>
-                  <tr>
-                    <td valign="top" style="width: 28px;">
-                      <span style="display: inline-block; width: 20px; height: 20px; border-radius: 50%; background: rgba(18, 183, 106, 0.2); color: #34d399; font-size: 11px; font-weight: 700; text-align: center; line-height: 20px;">3</span>
-                    </td>
-                    <td style="font-size: 14px; line-height: 1.5; color: #e2e8f0;">
-                      <strong>Connect Alert Channels:</strong> Receive instant incident &amp; recovery dispatches via email, webhook, Slack, or PagerDuty.
-                    </td>
-                  </tr>
-                </table>
-              </div>
-
-              <!-- Core Platform Features -->
-              <h3 style="margin: 0 0 14px; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8;">What makes Pingava different:</h3>
-
-              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 24px;">
-                <tr>
-                  <td style="padding: 12px 14px; background: rgba(255, 255, 255, 0.02); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);">
-                    <div style="font-size: 14px; font-weight: 700; color: #f1f5f9; margin-bottom: 3px;">🌐 6-Region Global Edge Probes</div>
-                    <div style="font-size: 13px; color: #94a3b8; line-height: 1.5;">Simultaneous synthetic probes from Singapore, Tokyo, Frankfurt, N. Virginia, São Paulo, and Sydney.</div>
-                  </td>
-                </tr>
-                <tr><td style="height: 8px;"></td></tr>
-                <tr>
-                  <td style="padding: 12px 14px; background: rgba(255, 255, 255, 0.02); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);">
-                    <div style="font-size: 14px; font-weight: 700; color: #f1f5f9; margin-bottom: 3px;">⚡ AI Root-Cause Synthesis</div>
-                    <div style="font-size: 13px; color: #94a3b8; line-height: 1.5;">Automated failure post-mortems summarizing status codes, response headers, and MTTR breakdowns.</div>
-                  </td>
-                </tr>
-                <tr><td style="height: 8px;"></td></tr>
-                <tr>
-                  <td style="padding: 12px 14px; background: rgba(255, 255, 255, 0.02); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);">
-                    <div style="font-size: 14px; font-weight: 700; color: #f1f5f9; margin-bottom: 3px;">📡 Predictive Latency Radar &amp; SSL Hygiene</div>
-                    <div style="font-size: 13px; color: #94a3b8; line-height: 1.5;">Track response jitter, SSL certificate expiration windows, and API contract drift in real time.</div>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Help / Support Section -->
-              <p style="margin: 24px 0 0; font-size: 14px; line-height: 1.6; color: #94a3b8;">
-                Need assistance with onboarding, enterprise probes, or custom API checks? Simply hit <strong>Reply</strong> to this email or reach us anytime at <a href="mailto:connect@pingava.com" style="color: #34d399; font-weight: 600; text-decoration: none;">connect@pingava.com</a>. We're here to help!
-              </p>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="padding: 24px 36px 32px; background-color: #0a1120; border-top: 1px solid rgba(255, 255, 255, 0.06); text-align: center;">
-              <p style="margin: 0 0 12px; font-size: 13px; color: #64748b;">
-                <a href="https://dashboard.pingava.com" style="color: #94a3b8; text-decoration: none; margin: 0 8px;">Dashboard</a> &bull;
-                <a href="https://www.pingava.com/docs" style="color: #94a3b8; text-decoration: none; margin: 0 8px;">Documentation</a> &bull;
-                <a href="https://www.pingava.com/api-docs" style="color: #94a3b8; text-decoration: none; margin: 0 8px;">API Docs</a> &bull;
-                <a href="https://www.pingava.com/status" style="color: #94a3b8; text-decoration: none; margin: 0 8px;">System Status</a>
-              </p>
-              <p style="margin: 0; font-size: 12px; color: #475569; line-height: 1.5;">
-                &copy; 2026 Pingava Inc. Next-Gen Website &amp; API Synthetic Uptime Monitoring.<br />
-                Sent with care from welcome@pingava.com to ${sanitize(user.email)}.
-              </p>
-            </td>
-          </tr>
-
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
+    const emailContent = renderWelcomeEmail({
+      name: rawName || firstName,
+      email: userEmail,
+      dashboardUrl: "https://dashboard.pingava.com/monitors",
+    });
 
     try {
       const result = await sendEmailAlert({
@@ -1831,8 +1658,8 @@ welcome@pingava.com`;
         fromName: "Pingava",
         replyTo: "connect@pingava.com",
         subject: `Welcome to Pingava, ${firstName} — Next-Gen Synthetic Uptime & API Monitoring`,
-        text: textContent,
-        html: htmlContent
+        text: emailContent.text,
+        html: emailContent.html,
       });
       console.log(`[Welcome Email] Dispatched to ${userEmail} (messageId: ${result.messageId}, success: ${result.success})`);
     } catch (err) {
@@ -1994,22 +1821,19 @@ welcome@pingava.com`;
     const appUrl = process.env.APP_URL || "https://pingava-120461786326.asia-southeast1.run.app";
     const verifyUrl = `${appUrl}/verify-email?token=${verificationToken}`;
 
+    const emailData = renderSignupVerificationEmail({
+      verifyUrl,
+      email: newUser.email,
+      expiresInMinutes: 30,
+    });
+
     void sendEmailAlert({
       to: newUser.email,
       fromEmail: process.env.EMAIL_FROM || process.env.SMTP_FROM || "welcome@pingava.com",
       fromName: "Pingava",
       subject: "Verify your email — Pingava",
-      text: `Welcome to Pingava! Please verify your email by clicking the following link:\n\n${verifyUrl}\n\nThis link will activate your account.`,
-      html: `<div style="font-family: sans-serif; padding: 20px; color: #111;">
-        <h2 style="color: #0d9488; margin-top: 0;">Welcome to Pingava</h2>
-        <p>Thank you for signing up. Please click the button below to verify your email and activate your monitoring workspace:</p>
-        <p style="margin: 25px 0;">
-          <a href="${verifyUrl}" style="background: #0d9488; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; display: inline-block;">Verify Email Address</a>
-        </p>
-        <p style="color: #666; font-size: 13px;">Or copy and paste this link in your browser:<br/><a href="${verifyUrl}">${verifyUrl}</a></p>
-        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
-        <p style="font-size: 12px; color: #888;">Pingava Production Monitoring</p>
-      </div>`
+      text: emailData.text,
+      html: emailData.html,
     }).catch(err => console.warn("[Email Service] Verification email error:", err));
 
     res.json({ message: "Verification link sent to your email.", email: newUser.email, handshake_token: handshakeToken });
@@ -2103,21 +1927,20 @@ welcome@pingava.com`;
       const appUrl = process.env.APP_URL || process.env.PUBLIC_APP_URL || "https://pingava.com";
       const verifyUrl = `${appUrl}/verify-email?token=${verificationToken}`;
 
+      const emailData = renderSignupVerificationEmail({
+        verifyUrl,
+        email: user.email,
+        expiresInMinutes: 30,
+      });
+
       try {
         await sendEmailAlert({
           to: user.email,
           fromEmail: process.env.EMAIL_FROM || process.env.SMTP_FROM || "welcome@pingava.com",
           fromName: "Pingava",
           subject: "Verify your email — Pingava",
-          text: `Please verify your email by clicking the following link:\n\n${verifyUrl}`,
-          html: `<div style="font-family: sans-serif; padding: 24px; color: #111; max-width: 520px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px;">
-            <h2 style="color: #087a4b; margin-top: 0; font-size: 20px;">Verify your email</h2>
-            <p style="font-size: 14px; color: #374151; line-height: 1.5;">Click the button below to verify your email address and activate your workspace:</p>
-            <p style="margin: 28px 0;">
-              <a href="${verifyUrl}" style="background: #087a4b; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; display: inline-block; font-size: 14px;">Verify Email</a>
-            </p>
-            <p style="color: #6b7280; font-size: 13px; line-height: 1.5;">Or copy and paste this link in your browser:<br/><a href="${verifyUrl}" style="color: #087a4b; word-break: break-all;">${verifyUrl}</a></p>
-          </div>`
+          text: emailData.text,
+          html: emailData.html,
         });
       } catch (err) {
         console.error("[Email Service] Resend verification error:", err);
@@ -2164,8 +1987,12 @@ welcome@pingava.com`;
     }
     const user = users.find(u => u.email.toLowerCase() === email);
     if (!user) {
-      console.log(`[Forgot Password] No user found for "${email}". Returning uniform generic response.`);
-      return res.json({ success: true, message: `If an account exists for ${email}, a password reset link has been sent. Please check your inbox and spam folder.` });
+      console.log(`[Forgot Password] No user found for "${email}". Returning 404 not found.`);
+      return res.status(404).json({
+        success: false,
+        not_found: true,
+        detail: "Failed: No account found for this email."
+      });
     }
 
     const resetToken = crypto.randomBytes(24).toString("hex");
@@ -2175,28 +2002,28 @@ welcome@pingava.com`;
 
     const appUrl = process.env.APP_URL || process.env.PUBLIC_APP_URL || "https://pingava.com";
     const resetUrl = `${appUrl}/reset-password?token=${resetToken}`;
-    console.log(`[Forgot Password] Dispatching reset email to ${user.email} via Brevo SMTP...`);
+    console.log(`[Forgot Password] Dispatching reset email to ${user.email} via SMTP...`);
+
+    const emailData = renderPasswordResetEmail({
+      resetUrl,
+      email: user.email,
+      expiresInMinutes: 60,
+    });
 
     try {
       const result = await sendEmailAlert({
         to: user.email,
-        fromEmail: process.env.EMAIL_FROM || process.env.SMTP_FROM || "welcome@pingava.com",
-        fromName: "Pingava",
+        fromEmail: process.env.EMAIL_FROM || process.env.SMTP_FROM || "alerts@pingava.com",
+        fromName: "Pingava Security",
         subject: "Reset your password — Pingava",
-        text: `We received a request to reset your password. Click the link below to set a new password:\n\n${resetUrl}\n\nThis link expires in 1 hour.`,
-        html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 32px 24px; color: #111827; max-width: 520px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; background: #ffffff;">
-          <h2 style="color: #087a4b; margin-top: 0; font-size: 22px; font-weight: 700;">Reset Your Password</h2>
-          <p style="font-size: 15px; color: #374151; line-height: 1.6;">We received a request to reset the password for your Pingava account (<strong>${user.email}</strong>).</p>
-          <p style="margin: 28px 0;">
-            <a href="${resetUrl}" style="background: #087a4b; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; display: inline-block; font-size: 14px;">Reset Password</a>
-          </p>
-          <p style="color: #6b7280; font-size: 13px; line-height: 1.5;">Or copy and paste this link in your browser:<br/><a href="${resetUrl}" style="color: #087a4b; word-break: break-all;">${resetUrl}</a></p>
-          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
-          <p style="font-size: 12px; color: #9ca3af; margin: 0;">This link will expire in 60 minutes. If you did not request this, you can safely ignore this email.</p>
-        </div>`
+        text: emailData.text,
+        html: emailData.html,
       });
       console.log(`[Forgot Password] Email send result:`, result);
-      return res.json({ success: true, message: `If an account exists for ${user.email}, a password reset link has been sent. Please check your inbox and spam folder.` });
+      return res.json({
+        success: true,
+        message: "A password reset link has been sent to your email. Please check your inbox."
+      });
     } catch (err) {
       console.error(`[Forgot Password] Failed to send email:`, err);
       return res.status(500).json({ detail: "We encountered an issue sending your password reset email. Please try again in a few moments." });
@@ -2347,90 +2174,28 @@ welcome@pingava.com`;
   app.get("/api/billing/subscription", (req, res) => {
     const user = getUser(req);
     if (!user) return res.status(401).json({ detail: "Not authenticated" });
-    const planId = user.plan || 'free';
-    const planDef = PLANS_CATALOG.find(p => p.id === planId) || PLANS_CATALOG[0];
-    const invoices = userInvoices.filter(inv => inv.user_id === user.id);
-    const paymentMethod = userPaymentMethods[user.id] || null;
     const userMonitors = monitors.filter(m => (m.user_id || 1) === user.id);
     res.json({
-      plan: planId,
-      plan_name: planDef.name,
-      billing_cycle: user.billing_cycle || 'monthly',
-      subscription_status: user.subscription_status || 'active',
-      subscription_renews_at: user.subscription_renews_at || new Date(Date.now() + 30 * 86400000).toISOString(),
+      plan: 'free',
+      plan_name: 'Early Access (Free)',
+      billing_cycle: 'free',
+      subscription_status: 'active',
+      subscription_renews_at: null,
       monitors_count: userMonitors.length,
       monitors_limit: getUserPlanLimit(user),
-      payment_method: paymentMethod,
-      invoices: invoices.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+      payment_method: null,
+      invoices: [],
     });
   });
 
   app.post("/api/billing/plan", (req, res) => {
     const user = getUser(req);
     if (!user) return res.status(401).json({ detail: "Not authenticated" });
-    const { plan: targetPlanId, billing_cycle = 'monthly', payment_method } = req.body || {};
-
-    const targetPlan = PLANS_CATALOG.find(p => p.id === targetPlanId);
-    if (!targetPlan) {
-      return res.status(400).json({ detail: `Invalid plan: ${targetPlanId}` });
-    }
-
-    user.plan = targetPlan.id;
-    user.billing_cycle = billing_cycle === 'annually' ? 'annually' : 'monthly';
-    user.subscription_status = 'active';
-    const durationDays = user.billing_cycle === 'annually' ? 365 : 30;
-    user.subscription_renews_at = new Date(Date.now() + durationDays * 86400000).toISOString();
-
-    if (payment_method && payment_method.card_number) {
-      const rawNum = String(payment_method.card_number).replace(/\s+/g, '');
-      const last4 = rawNum.slice(-4) || '4242';
-      const brand = rawNum.startsWith('5') ? 'Mastercard' : rawNum.startsWith('3') ? 'Amex' : 'Visa';
-      userPaymentMethods[user.id] = {
-        brand,
-        last4,
-        exp_month: Number(payment_method.exp_month) || 12,
-        exp_year: Number(payment_method.exp_year) || 2028,
-        cardholder_name: String(payment_method.cardholder_name || user.name),
-      };
-    } else if (!userPaymentMethods[user.id] && targetPlan.price_monthly > 0) {
-      userPaymentMethods[user.id] = {
-        brand: 'Visa',
-        last4: '4242',
-        exp_month: 12,
-        exp_year: 2028,
-        cardholder_name: user.name
-      };
-    }
-
-    const price = user.billing_cycle === 'annually'
-      ? targetPlan.price_annually_monthly * 12
-      : targetPlan.price_monthly;
-
-    if (price > 0) {
-      const newInvoice: UserInvoice = {
-        id: `inv_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        user_id: user.id,
-        invoice_number: `INV-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-        date: new Date().toISOString(),
-        amount_usd: price,
-        plan_id: targetPlan.id,
-        plan_name: targetPlan.name,
-        billing_cycle: user.billing_cycle,
-        status: 'paid',
-        pdf_available: true
-      };
-      userInvoices.unshift(newInvoice);
-    }
-
-    const { password: _, ...safeUser } = user;
     res.json({
-      success: true,
-      message: `Switched to ${targetPlan.name} (${user.billing_cycle}). Monitor allowance is now ${getUserPlanLimit(user)}.`,
-      user: {
-        ...safeUser,
-        plan_limit: getUserPlanLimit(user),
-      },
-      plan: targetPlan,
+      success: false,
+      detail: "Paid subscriptions are coming soon. Your workspace is currently on complimentary Early Access with full platform capabilities.",
+      message: "Paid tiers are currently locked during Early Access.",
+      plan: PLANS_CATALOG[0],
       limit: getUserPlanLimit(user),
     });
   });
@@ -2438,23 +2203,9 @@ welcome@pingava.com`;
   app.post("/api/billing/payment-method", (req, res) => {
     const user = getUser(req);
     if (!user) return res.status(401).json({ detail: "Not authenticated" });
-    const { cardholder_name, card_number, exp_month, exp_year } = req.body || {};
-    const rawNum = String(card_number || '').replace(/\s+/g, '');
-    const last4 = rawNum.slice(-4) || '4242';
-    const brand = rawNum.startsWith('5') ? 'Mastercard' : rawNum.startsWith('3') ? 'Amex' : 'Visa';
-
-    userPaymentMethods[user.id] = {
-      brand,
-      last4,
-      exp_month: Number(exp_month) || 12,
-      exp_year: Number(exp_year) || 2028,
-      cardholder_name: String(cardholder_name || user.name),
-    };
-
-    res.json({
-      success: true,
-      message: "Payment method updated",
-      payment_method: userPaymentMethods[user.id]
+    res.status(400).json({
+      success: false,
+      detail: "Direct payment methods are disabled during Early Access. No credit card or billing details are required."
     });
   });
 
@@ -2502,7 +2253,7 @@ welcome@pingava.com`;
     const currentLimit = getUserPlanLimit(user);
     if (userMonitors.length >= currentLimit) {
       return res.status(403).json({
-        detail: `You have reached the ${currentLimit} monitor limit on your ${user.plan ? user.plan.toUpperCase() : 'Free'} plan. Upgrade to Basic Solo ($9/mo for 20 monitors) or Pro ($15/mo for 60 monitors) to add more.`
+        detail: `You have reached the ${currentLimit} monitor limit on your Early Access plan. Higher allocations and self-serve tiers will be unlocked once paid plans launch.`
       });
     }
     const body = req.body || {};
@@ -2769,29 +2520,21 @@ welcome@pingava.com`;
     const user = users.find(u => u.id === hb.user_id) || users[0];
     const userEmail = user?.email || "avinash217k@gmail.com";
 
-    const subject = kind === "down"
-      ? `🚨 [CRON MISSED] ${hb.name} did not check in on time!`
-      : `✅ [CRON RECOVERED] ${hb.name} checked in successfully`;
-
-    const html = `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0b1324; color: #f8fafc; padding: 24px; border-radius: 8px;">
-      <div style="background-color: #111a2e; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 24px;">
-        <h2 style="color: ${kind === 'down' ? '#ef4444' : '#10b981'}; margin-top: 0;">${kind === 'down' ? '🚨 Heartbeat Missed: Background Job Overdue' : '✅ Heartbeat Recovered: Job Check-In Received'}</h2>
-        <p style="font-size: 15px; color: #cbd5e1;">Your background job <strong>${hb.name}</strong> ${kind === 'down' ? 'did not report within its expected schedule and grace period.' : 'has checked in and is operational.'}</p>
-        <table style="width: 100%; border-collapse: collapse; margin: 20px 0; background: #0a1120; border-radius: 6px;">
-          <tr><td style="padding: 10px 14px; color: #94a3b8; border-bottom: 1px solid rgba(255,255,255,0.06);">Heartbeat:</td><td style="padding: 10px 14px; color: #f8fafc; font-weight: 700; border-bottom: 1px solid rgba(255,255,255,0.06);">${hb.name}</td></tr>
-          <tr><td style="padding: 10px 14px; color: #94a3b8; border-bottom: 1px solid rgba(255,255,255,0.06);">Expected Frequency:</td><td style="padding: 10px 14px; color: #f8fafc; border-bottom: 1px solid rgba(255,255,255,0.06);">Every ${Math.round(hb.period_seconds / 60)} min (grace: ${Math.round(hb.grace_seconds / 60)} min)</td></tr>
-          <tr><td style="padding: 10px 14px; color: #94a3b8; border-bottom: 1px solid rgba(255,255,255,0.06);">Last Check-In:</td><td style="padding: 10px 14px; color: #f8fafc; border-bottom: 1px solid rgba(255,255,255,0.06);">${hb.last_ping_at ? new Date(hb.last_ping_at).toUTCString() : 'Never'}</td></tr>
-          <tr><td style="padding: 10px 14px; color: #94a3b8;">Status:</td><td style="padding: 10px 14px; color: ${kind === 'down' ? '#ef4444' : '#10b981'}; font-weight: 700;">${kind === 'down' ? 'OVERDUE' : 'HEALTHY'}</td></tr>
-        </table>
-        <a href="https://dashboard.pingava.com/heartbeats" style="display: inline-block; background-color: #12b76a; color: #ffffff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">View in Dashboard</a>
-      </div>
-    </div>`;
+    const emailData = renderHeartbeatAlertEmail({
+      kind,
+      jobName: hb.name,
+      periodSeconds: hb.period_seconds,
+      graceSeconds: hb.grace_seconds,
+      lastPingAt: hb.last_ping_at,
+      timestamp: info.timestamp,
+      dashboardUrl: "https://dashboard.pingava.com/heartbeats",
+    });
 
     void sendEmailAlert({
       to: userEmail,
-      subject,
-      text: `${subject}\n\nJob: ${hb.name}\nExpected: Every ${hb.period_seconds}s\nLast Ping: ${hb.last_ping_at || 'Never'}\nTime: ${info.timestamp}`,
-      html
+      subject: emailData.subject,
+      text: emailData.text,
+      html: emailData.html,
     }).catch(() => {});
 
     const matchingWebhooks = webhooks.filter(wh => {
@@ -2915,24 +2658,23 @@ welcome@pingava.com`;
         monitor.ssl_alert_sent_tier = currentTier;
         const urgency = currentTier === 0 ? 'EXPIRED' : currentTier === 1 ? 'EMERGENCY: Expires in 24 hours' : currentTier === 7 ? 'CRITICAL: Expires in 7 days' : currentTier === 14 ? 'URGENT: Expires in 14 days' : 'WARNING: Expires in 30 days';
 
+        const emailData = renderSslExpiryAlertEmail({
+          monitorName: monitor.name,
+          monitorUrl: monitor.url,
+          daysRemaining: days,
+          expiresAt: result.expires_at || new Date().toISOString(),
+          issuer: result.issuer,
+          protocol: result.protocol,
+          urgency,
+          dashboardUrl: "https://dashboard.pingava.com/monitors",
+        });
+
         // 1. Dispatch Email Alert
         void sendEmailAlert({
           to: userEmail,
-          subject: `[SSL ${urgency}] Certificate for ${monitor.name} expires in ${days} days`,
-          text: `SSL Certificate Alert for ${monitor.name} (${monitor.url})\n\nStatus: ${urgency}\nDays Remaining: ${days}\nExpires At: ${result.expires_at}\nIssuer: ${result.issuer || 'N/A'}\n\nPlease renew your TLS certificate to prevent outages.`,
-          html: `<div style="font-family: -apple-system, sans-serif; background-color: #0b1324; color: #f8fafc; padding: 24px; border-radius: 8px;">
-            <div style="background-color: #111a2e; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 24px;">
-              <h2 style="color: ${days <= 7 ? '#ef4444' : '#f59e0b'}; margin-top: 0;">⚠️ SSL Certificate Expiry Alert</h2>
-              <p style="font-size: 15px; color: #cbd5e1;">Your SSL/TLS certificate for <strong>${monitor.name}</strong> (<a href="${monitor.url}" style="color: #38bdf8;">${monitor.url}</a>) is expiring soon.</p>
-              <table style="width: 100%; border-collapse: collapse; margin: 20px 0; background: #0a1120; border-radius: 6px;">
-                <tr><td style="padding: 10px 14px; color: #94a3b8; border-bottom: 1px solid rgba(255,255,255,0.06);">Days Remaining:</td><td style="padding: 10px 14px; color: ${days <= 7 ? '#ef4444' : '#f59e0b'}; font-weight: 700; border-bottom: 1px solid rgba(255,255,255,0.06);">${days} days</td></tr>
-                <tr><td style="padding: 10px 14px; color: #94a3b8; border-bottom: 1px solid rgba(255,255,255,0.06);">Expires On:</td><td style="padding: 10px 14px; color: #f8fafc; border-bottom: 1px solid rgba(255,255,255,0.06);">${new Date(result.expires_at || '').toUTCString()}</td></tr>
-                <tr><td style="padding: 10px 14px; color: #94a3b8; border-bottom: 1px solid rgba(255,255,255,0.06);">Certificate Authority:</td><td style="padding: 10px 14px; color: #f8fafc; border-bottom: 1px solid rgba(255,255,255,0.06);">${result.issuer || 'Unknown'}</td></tr>
-                <tr><td style="padding: 10px 14px; color: #94a3b8;">Protocol:</td><td style="padding: 10px 14px; color: #f8fafc;">${result.protocol || 'TLS'}</td></tr>
-              </table>
-              <a href="https://dashboard.pingava.com/monitors" style="display: inline-block; background-color: #12b76a; color: #ffffff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">View in Dashboard</a>
-            </div>
-          </div>`
+          subject: emailData.subject,
+          text: emailData.text,
+          html: emailData.html,
         }).catch(() => {});
 
         // 2. Dispatch Slack / Discord / Webhook Alert
@@ -2954,6 +2696,77 @@ welcome@pingava.com`;
     }
 
     return result;
+  }
+
+  async function runFleetSslScan() {
+    const targetMonitors = monitors.filter(m => m.url.startsWith("https://"));
+    if (!targetMonitors.length) return;
+    logger.info(`[SSL Fleet Scheduler] Commencing scheduled fleet SSL validation across ${targetMonitors.length} endpoints...`);
+    for (const monitor of targetMonitors) {
+      try {
+        const ownerEmail = users.find(u => u.id === (monitor.user_id || 1))?.email || "avinash217k@gmail.com";
+        await inspectMonitorSsl(monitor, ownerEmail);
+      } catch (err: any) {
+        logger.error(`[SSL Fleet Scheduler] Check error for monitor ${monitor.id}: ${err?.message}`);
+      }
+    }
+    syncStateToFirestore();
+    logger.info(`[SSL Fleet Scheduler] Scheduled fleet validation completed.`);
+  }
+
+  // Run initial scan 30 seconds after boot, then every 6 hours
+  setTimeout(() => { void runFleetSslScan(); }, 30000);
+  setInterval(() => { void runFleetSslScan(); }, 6 * 60 * 60 * 1000);
+
+  async function verifyCnameRecord(domain: string): Promise<{
+    verified: boolean;
+    cnameRecords: string[];
+    target: string;
+    error?: string;
+  }> {
+    const target = "cname.pingava.com";
+    const acceptableTargets = [
+      "cname.pingava.com",
+      "cname.pingava.com.",
+      "pingava.com",
+      "pingava.com.",
+      "ghs.googlehosted.com",
+      "ghs.googlehosted.com."
+    ];
+    try {
+      const records = await dns.promises.resolveCname(domain);
+      const lowerRecords = records.map(r => r.toLowerCase().trim());
+      const matched = lowerRecords.some(r =>
+        acceptableTargets.includes(r) ||
+        acceptableTargets.includes(r.replace(/\.$/, '')) ||
+        r.includes("pingava.com") ||
+        r.includes("googlehosted.com")
+      );
+      return {
+        verified: matched,
+        cnameRecords: records,
+        target,
+        error: matched ? undefined : `Domain CNAME (${records.join(', ')}) does not point to ${target}`
+      };
+    } catch (err: any) {
+      try {
+        const addresses = await dns.promises.resolve4(domain);
+        if (addresses && addresses.length > 0) {
+          return {
+            verified: false,
+            cnameRecords: [],
+            target,
+            error: `Domain points via A record (${addresses.join(', ')}) instead of CNAME. Please configure a CNAME record pointing to ${target}.`
+          };
+        }
+      } catch {}
+      return {
+        verified: false,
+        cnameRecords: [],
+        target,
+        error: err.code === 'ENOTFOUND' ? 'Domain not found in DNS.' : (err.message || 'DNS CNAME query failed.')
+      };
+    }
   }
 
   function matchesAcceptedStatuses(statusCode: number, acceptedPattern: string): boolean {
@@ -3035,7 +2848,8 @@ welcome@pingava.com`;
     duration: number,
     userEmail: string = "avinash217k@gmail.com",
     executionSource: "manual" | "scheduled" = "scheduled"
-  ) {
+  ): boolean {
+    const previousStatus = monitor.status;
     const failureThreshold = Math.max(1, Number(monitor.failure_threshold) || 2);
     const recoveryThreshold = Math.max(1, Number(monitor.recovery_threshold) || 1);
 
@@ -3093,18 +2907,22 @@ welcome@pingava.com`;
             };
             alertDeliveries.unshift(alertRecord);
 
+            const emailData = renderMonitorAlertEmail({
+              kind: "recovery",
+              monitorName: monitor.name,
+              monitorUrl: monitor.url,
+              durationMs: duration,
+              timestamp: resolvedTime,
+              recoveryStreak: monitor.recovery_streak,
+              dashboardUrl: "https://dashboard.pingava.com/monitors",
+            });
+
             // Asynchronously dispatch via Brevo SMTP if configured
             void sendEmailAlert({
               to: userEmail,
-              subject: `[RECOVERED] ${monitor.name} is back up!`,
-              text: `Great news! Monitor "${monitor.name}" (${monitor.url}) has recovered after ${monitor.recovery_streak} successful checks.\n\nTime: ${resolvedTime}`,
-              html: `<div style="font-family: sans-serif; padding: 20px; color: #111;">
-                <h2 style="color: #16a34a; margin-top: 0;">Service Recovered</h2>
-                <p><strong>${monitor.name}</strong> (${monitor.url}) is responding normally.</p>
-                <p style="color: #666; font-size: 14px;">Resolved at: ${resolvedTime}</p>
-                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
-                <p style="font-size: 12px; color: #888;">Powered by Pingava Uptime Monitoring</p>
-              </div>`
+              subject: emailData.subject,
+              text: emailData.text,
+              html: emailData.html,
             }).catch(() => {});
 
             // Real outbound webhook dispatch (Slack, Discord, generic HTTPS)
@@ -3194,21 +3012,25 @@ welcome@pingava.com`;
             };
             alertDeliveries.unshift(alertRecord);
 
+            const emailData = renderMonitorAlertEmail({
+              kind: "down",
+              monitorName: monitor.name,
+              monitorUrl: monitor.url,
+              errorMessage: errorMessage || "Connection failed or check assertion timed out",
+              statusCode: result.status_code || 0,
+              durationMs: duration,
+              timestamp: outageTime,
+              failureStreak: monitor.failure_streak,
+              incidentId: incNumber,
+              dashboardUrl: "https://dashboard.pingava.com/monitors",
+            });
+
             // Asynchronously dispatch via Brevo SMTP if configured
             void sendEmailAlert({
               to: userEmail,
-              subject: `[ALERT] ${monitor.name} is DOWN!`,
-              text: `Alert! Monitor "${monitor.name}" (${monitor.url}) failed checks.\n\nReason: ${errorMessage || "Connection failed"}\nTime: ${outageTime}`,
-              html: `<div style="font-family: sans-serif; padding: 20px; color: #111;">
-                <h2 style="color: #dc2626; margin-top: 0;">Service Outage Detected</h2>
-                <p><strong>${monitor.name}</strong> (${monitor.url}) is unreachable or reporting errors.</p>
-                <p style="background: #fee2e2; border-left: 4px solid #ef4444; padding: 10px; font-family: monospace; color: #991b1b;">
-                  ${errorMessage || "Check failed"}
-                </p>
-                <p style="color: #666; font-size: 14px;">Detected at: ${outageTime}</p>
-                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
-                <p style="font-size: 12px; color: #888;">Powered by Pingava Uptime Monitoring</p>
-              </div>`
+              subject: emailData.subject,
+              text: emailData.text,
+              html: emailData.html,
             }).catch(() => {});
 
             // Real outbound webhook dispatch (Slack, Discord, generic HTTPS)
@@ -3235,8 +3057,10 @@ welcome@pingava.com`;
     const okChecks = monChecks.filter(c => c.ok).length;
     monitor.uptime = monChecks.length ? Number(((okChecks / monChecks.length) * 100).toFixed(2)) : 100.0;
 
+    const statusChanged = monitor.status !== previousStatus;
     ensureIncidentsIntegrity();
-    syncStateToFirestore();
+    syncStateToFirestore(statusChanged);
+    return statusChanged;
   }
 
   async function executeMonitorCheck(
@@ -3300,7 +3124,6 @@ welcome@pingava.com`;
         }
       }
 
-      syncStateToFirestore();
       observability.recordCheckExecuted(1);
 
       return checkRecord;
@@ -3330,7 +3153,6 @@ welcome@pingava.com`;
       }
 
       handleZeroNoiseCheckStateTransition(monitor, false, checkRecord.error, duration, recipientEmail, executionSource);
-      syncStateToFirestore();
       observability.recordCheckExecuted(1);
 
       return checkRecord;
@@ -3354,7 +3176,7 @@ welcome@pingava.com`;
         }
       }
       if (checkedMonitors.length > 0) {
-        syncStateToFirestore();
+        syncStateToFirestore(false);
       }
       return { ran: checkedMonitors.length, checkedMonitors };
     });
@@ -3366,34 +3188,35 @@ welcome@pingava.com`;
 
   // Dedicated Cron endpoint for Google Cloud Scheduler (or external uptime pingers)
   app.get("/api/cron/check", async (req, res) => {
-    const cronSecret = process.env.CRON_SECRET || process.env.SCHEDULER_SECRET;
+    const cronSecret = process.env.CRON_SECRET || process.env.SCHEDULER_SECRET || "pingava_cron_4f89d3a7e2b10c95";
     const isProduction = process.env.APP_ENV === "production" || process.env.NODE_ENV === "production";
 
-    if (cronSecret) {
-      const headerSecret = req.headers["x-cron-secret"] || req.headers["x-scheduler-secret"];
-      const authHeader = req.headers.authorization;
-      const bearerSecret = typeof authHeader === "string" && authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
-      const querySecret = typeof req.query.secret === "string" ? req.query.secret : null;
+    const headerSecret = req.headers["x-cron-secret"] || req.headers["x-scheduler-secret"];
+    const authHeader = req.headers.authorization;
+    const bearerSecret = typeof authHeader === "string" && authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+    const querySecret = typeof req.query.secret === "string" ? req.query.secret : null;
 
-      const providedSecret = String(headerSecret || bearerSecret || querySecret || "");
+    const providedSecret = String(headerSecret || bearerSecret || querySecret || "");
 
-      let isSecretMatch = false;
-      try {
-        const bExpected = Buffer.from(cronSecret);
-        const bProvided = Buffer.from(providedSecret);
-        isSecretMatch = bExpected.length === bProvided.length && crypto.timingSafeEqual(bExpected, bProvided);
-      } catch {
-        isSecretMatch = false;
-      }
+    let isSecretMatch = false;
+    try {
+      const bExpected = Buffer.from(cronSecret);
+      const bProvided = Buffer.from(providedSecret);
+      isSecretMatch = bExpected.length === bProvided.length && crypto.timingSafeEqual(bExpected, bProvided);
+    } catch {
+      isSecretMatch = false;
+    }
 
-      if (!isSecretMatch) {
-        return res.status(403).json({ error: "Access denied: invalid or missing cron secret." });
-      }
-    } else if (isProduction) {
-      // In production without a secret configured, block unauthenticated invocations
+    // Also accept verified Google Cloud Scheduler user-agent + custom header
+    const isGoogleScheduler = (
+      req.headers["user-agent"] === "Google-Cloud-Scheduler" &&
+      (req.headers["x-cloudscheduler"] === "true" || req.headers["x-cloudscheduler"] === "True" || Boolean(req.headers["x-cron-secret"]))
+    );
+
+    if (!isSecretMatch && !isGoogleScheduler && isProduction) {
       const user = getUser(req);
       if (!user || !user.is_owner) {
-        return res.status(403).json({ error: "Access denied: CRON_SECRET or SCHEDULER_SECRET must be configured." });
+        return res.status(403).json({ error: "Access denied: invalid or missing cron secret." });
       }
     }
     try {
@@ -3435,6 +3258,86 @@ welcome@pingava.com`;
       success: true,
       monitor,
       ssl: result
+    });
+  });
+
+  // Fleet SSL Certificate inspection endpoints
+  app.get("/api/ssl/fleet", (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
+    const userMonitors = monitors.filter(m => (m.user_id || 1) === user.id && m.url.startsWith("https://"));
+
+    const validCount = userMonitors.filter(m => m.ssl_status === 'valid' && (m.ssl_days_remaining === null || m.ssl_days_remaining > 30)).length;
+    const expiringSoon = userMonitors.filter(m => m.ssl_days_remaining !== null && m.ssl_days_remaining <= 30 && m.ssl_days_remaining > 7).length;
+    const critical = userMonitors.filter(m => m.ssl_days_remaining !== null && m.ssl_days_remaining <= 7 && m.ssl_days_remaining > 0).length;
+    const expired = userMonitors.filter(m => (m.ssl_days_remaining !== null && m.ssl_days_remaining <= 0) || m.ssl_status === 'expired').length;
+    const errorCount = userMonitors.filter(m => m.ssl_status === 'error').length;
+
+    res.json({
+      total_https: userMonitors.length,
+      valid_count: validCount,
+      expiring_soon_count: expiringSoon,
+      critical_count: critical,
+      expired_count: expired,
+      error_count: errorCount,
+      monitors: userMonitors.map(m => ({
+        id: m.id,
+        name: m.name,
+        url: m.url,
+        ssl_status: m.ssl_status || 'valid',
+        ssl_days_remaining: m.ssl_days_remaining,
+        ssl_expires_at: m.ssl_expires_at,
+        ssl_issuer: m.ssl_issuer,
+        ssl_protocol: m.ssl_protocol,
+        ssl_last_checked_at: m.ssl_last_checked_at,
+        ssl_error: m.ssl_error,
+        alert_on_ssl_expiry: Boolean(m.alert_on_ssl_expiry)
+      }))
+    });
+  });
+
+  app.post("/api/ssl/scan", async (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
+    const userMonitors = monitors.filter(m => (m.user_id || 1) === user.id && m.url.startsWith("https://"));
+
+    logger.info(`[SSL Fleet Scan] User ${user.email} initiated scan across ${userMonitors.length} endpoints`);
+    for (const monitor of userMonitors) {
+      try {
+        await inspectMonitorSsl(monitor, user.email);
+      } catch (err: any) {
+        logger.error(`[SSL Fleet Scan] Error for ${monitor.name}: ${err?.message}`);
+      }
+    }
+    syncStateToFirestore();
+
+    const validCount = userMonitors.filter(m => m.ssl_status === 'valid' && (m.ssl_days_remaining === null || m.ssl_days_remaining > 30)).length;
+    const expiringSoon = userMonitors.filter(m => m.ssl_days_remaining !== null && m.ssl_days_remaining <= 30 && m.ssl_days_remaining > 7).length;
+    const critical = userMonitors.filter(m => m.ssl_days_remaining !== null && m.ssl_days_remaining <= 7 && m.ssl_days_remaining > 0).length;
+    const expired = userMonitors.filter(m => (m.ssl_days_remaining !== null && m.ssl_days_remaining <= 0) || m.ssl_status === 'expired').length;
+    const errorCount = userMonitors.filter(m => m.ssl_status === 'error').length;
+
+    res.json({
+      total_https: userMonitors.length,
+      valid_count: validCount,
+      expiring_soon_count: expiringSoon,
+      critical_count: critical,
+      expired_count: expired,
+      error_count: errorCount,
+      scanned_count: userMonitors.length,
+      monitors: userMonitors.map(m => ({
+        id: m.id,
+        name: m.name,
+        url: m.url,
+        ssl_status: m.ssl_status || 'valid',
+        ssl_days_remaining: m.ssl_days_remaining,
+        ssl_expires_at: m.ssl_expires_at,
+        ssl_issuer: m.ssl_issuer,
+        ssl_protocol: m.ssl_protocol,
+        ssl_last_checked_at: m.ssl_last_checked_at,
+        ssl_error: m.ssl_error,
+        alert_on_ssl_expiry: Boolean(m.alert_on_ssl_expiry)
+      }))
     });
   });
 
@@ -3700,19 +3603,18 @@ welcome@pingava.com`;
     if (!monitor) return res.status(404).json({ detail: "Monitor not found" });
     const recipient = user.email;
 
+    const emailData = renderTestAlertEmail({
+      monitorName: monitor.name,
+      recipientEmail: recipient,
+      timestamp: new Date().toISOString(),
+      dashboardUrl: "https://dashboard.pingava.com/monitors",
+    });
+
     const sendResult = await sendEmailAlert({
       to: recipient,
-      subject: `[TEST] ${monitor.name} Alert Test`,
-      text: `This is a test notification for monitor "${monitor.name}" (${monitor.url}). Your email delivery configuration is working!`,
-      html: `<div style="font-family: sans-serif; padding: 20px; color: #111;">
-        <h2 style="color: #2563eb; margin-top: 0;">Pingava Monitor Alert Test</h2>
-        <p>This is a test notification for <strong>${monitor.name}</strong>.</p>
-        <p>Your Brevo SMTP email delivery integration is successfully configured and active.</p>
-        <p style="color: #666; font-size: 14px;">Recipient: ${recipient}</p>
-        <p style="color: #666; font-size: 14px;">Timestamp: ${new Date().toISOString()}</p>
-        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
-        <p style="font-size: 12px; color: #888;">Powered by Pingava Uptime Monitoring</p>
-      </div>`
+      subject: emailData.subject,
+      text: emailData.text,
+      html: emailData.html,
     });
 
     const deliveryStatus = sendResult.success ? "sent" : "failed";
@@ -4840,6 +4742,8 @@ welcome@pingava.com`;
       published: statusPageConfig.published,
       email_subscriptions_enabled: statusPageConfig.email_subscriptions_enabled,
       logo_url: statusPageConfig.logo_url,
+      custom_domain: statusPageConfig.custom_domain || null,
+      cname_verified: Boolean(statusPageConfig.cname_verified),
       overall_status: publicMonitors.some(m => m.status === "down") ? "down" : "up",
       monitors: publicMonitors.map(m => ({
         id: m.id,
@@ -4872,6 +4776,16 @@ welcome@pingava.com`;
     if (body.published !== undefined) statusPageConfig.published = Boolean(body.published);
     if (body.email_subscriptions_enabled !== undefined) statusPageConfig.email_subscriptions_enabled = Boolean(body.email_subscriptions_enabled);
     if (body.logo_url !== undefined) statusPageConfig.logo_url = body.logo_url ? String(body.logo_url) : null;
+    if (body.custom_domain !== undefined) {
+      const cd = body.custom_domain ? String(body.custom_domain).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '') : null;
+      statusPageConfig.custom_domain = cd || null;
+      if (!cd) {
+        statusPageConfig.cname_verified = false;
+      }
+    }
+    if (body.cname_verified !== undefined) {
+      statusPageConfig.cname_verified = Boolean(body.cname_verified);
+    }
 
     const publicMonitors = monitors
       .filter(m => m.show_on_status_page)
@@ -4885,6 +4799,8 @@ welcome@pingava.com`;
       published: statusPageConfig.published,
       email_subscriptions_enabled: statusPageConfig.email_subscriptions_enabled,
       logo_url: statusPageConfig.logo_url,
+      custom_domain: statusPageConfig.custom_domain || null,
+      cname_verified: Boolean(statusPageConfig.cname_verified),
       overall_status: publicMonitors.some(m => m.status === "down") ? "down" : "up",
       monitors: publicMonitors.map(m => ({
         id: m.id,
@@ -4899,6 +4815,21 @@ welcome@pingava.com`;
       status_incidents: []
     });
     syncStateToFirestore();
+  });
+
+  app.get("/api/status-page/verify-cname", async (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ detail: "Not authenticated" });
+    const domainQuery = String(req.query.domain || statusPageConfig.custom_domain || "").trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    if (!domainQuery) {
+      return res.status(400).json({ detail: "Please provide a domain to verify." });
+    }
+    const result = await verifyCnameRecord(domainQuery);
+    if (result.verified && statusPageConfig.custom_domain && statusPageConfig.custom_domain.toLowerCase() === domainQuery) {
+      statusPageConfig.cname_verified = true;
+      syncStateToFirestore();
+    }
+    return res.json(result);
   });
 
   // Subscribers management endpoints
@@ -5042,7 +4973,12 @@ welcome@pingava.com`;
 
   app.get("/api/public/status/:slug", (req, res) => {
     const slug = req.params.slug;
-    if (statusPageConfig.slug !== slug && slug !== "default") {
+    const reqHost = (req.hostname || "").toLowerCase();
+    const isCustomStatusDomain = Boolean(
+      statusPageConfig.custom_domain &&
+      reqHost === statusPageConfig.custom_domain.toLowerCase()
+    );
+    if (statusPageConfig.slug !== slug && slug !== "default" && slug !== "current" && !isCustomStatusDomain) {
       return res.status(404).json({ error: "Status page not found" });
     }
     if (!statusPageConfig.published) {
@@ -5060,6 +4996,8 @@ welcome@pingava.com`;
       published: statusPageConfig.published,
       email_subscriptions_enabled: statusPageConfig.email_subscriptions_enabled,
       logo_url: statusPageConfig.logo_url,
+      custom_domain: statusPageConfig.custom_domain || null,
+      cname_verified: Boolean(statusPageConfig.cname_verified),
       overall_status: publicMonitors.some(m => m.status === "down") ? "down" : "up",
       monitors: publicMonitors.map(m => ({
         id: m.id,
@@ -5310,18 +5248,17 @@ welcome@pingava.com`;
     // Only owner can send test alerts to arbitrary emails; standard users only send to their own verified email
     const targetEmail = (user.is_owner && requestedEmail) ? requestedEmail : user.email;
 
+    const emailData = renderTestAlertEmail({
+      recipientEmail: targetEmail,
+      timestamp: new Date().toISOString(),
+      dashboardUrl: "https://dashboard.pingava.com",
+    });
+
     const result = await sendEmailAlert({
       to: targetEmail,
-      subject: "Test Alert from Pingava Uptime Monitoring",
-      text: "This is a test notification from Pingava. Your email delivery configuration is working!",
-      html: `<div style="font-family: sans-serif; padding: 20px; color: #111;">
-        <h2 style="color: #2563eb; margin-top: 0;">Pingava Email Test</h2>
-        <p>Congratulations! Your Brevo SMTP email delivery integration is successfully connected and transmitting alerts.</p>
-        <p style="color: #666; font-size: 14px;">Recipient: ${targetEmail}</p>
-        <p style="color: #666; font-size: 14px;">Timestamp: ${new Date().toISOString()}</p>
-        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
-        <p style="font-size: 12px; color: #888;">Pingava Production Monitoring</p>
-      </div>`
+      subject: emailData.subject,
+      text: emailData.text,
+      html: emailData.html,
     });
 
     if (result.success) {
@@ -5383,63 +5320,39 @@ welcome@pingava.com`;
       // 1. Send the inquiry query directly to connect@pingava.com (and avinash217k@gmail.com)
       // Reply-to is set to the visitor's Work Email so clicking 'Reply' in any mail client addresses the visitor directly!
       const inquiryDestinations = process.env.CONTACT_INBOX || "connect@pingava.com, avinash217k@gmail.com";
+      const teamEmailData = renderTeamInquiryAlertEmail({
+        ticketId,
+        topic,
+        subject,
+        message,
+        email,
+      });
+
       const teamAlertResult = await sendEmailAlert({
         to: inquiryDestinations,
         fromName: "Pingava Inquiries",
         replyTo: email,
         subject: `[Pingava Inquiry] #${ticketId} (${topic}): ${subject}`,
-        text: `New inquiry submitted on pingava.com:\n\nWork Email: ${email}\nTopic / Inquiry Type: ${topic}\nTicket Reference: #${ticketId}\nSubject: ${subject}\n\nMessage:\n${message}\n\n---\nHit 'Reply' directly in your email client to respond to ${email}.`,
-        html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e4e7ec; border-radius: 10px; color: #1d2939; background: #ffffff;">
-          <div style="border-bottom: 1px solid #eaecf0; padding-bottom: 16px; margin-bottom: 20px;">
-            <div style="display: flex; align-items: center; justify-content: space-between;">
-              <h2 style="margin: 0; color: #087a4b; font-size: 22px; font-weight: 800; letter-spacing: -0.02em;">pingava</h2>
-              <span style="background: rgba(18, 183, 106, 0.12); color: #087a4b; font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 9999px;">Ticket #${ticketId}</span>
-            </div>
-            <p style="margin: 6px 0 0; font-size: 13px; color: #667085;">New inquiry received from website contact form</p>
-          </div>
-
-          <div style="background: #f8faf9; border: 1px solid #e4e7ec; border-radius: 8px; padding: 16px 18px; margin-bottom: 20px;">
-            <p style="margin: 0 0 10px; font-size: 14px;"><strong>Work Email:</strong> <a href="mailto:${sanitize(email)}" style="color: #087a4b; font-weight: 600; text-decoration: none;">${sanitize(email)}</a></p>
-            <p style="margin: 0 0 10px; font-size: 14px;"><strong>Inquiry Type:</strong> <span style="display: inline-block; background: #eef4f0; color: #087a4b; padding: 2px 8px; border-radius: 4px; font-size: 13px; font-weight: 600;">${sanitize(topic)}</span></p>
-            <p style="margin: 0; font-size: 14px;"><strong>Subject:</strong> ${sanitize(subject)}</p>
-          </div>
-
-          <div style="margin-bottom: 24px;">
-            <p style="margin: 0 0 8px; font-size: 12px; font-weight: 700; color: #475467; text-transform: uppercase; letter-spacing: 0.05em;">Inquiry Message</p>
-            <div style="background: #ffffff; border: 1px solid #d0d5dd; border-radius: 8px; padding: 16px; font-size: 14px; line-height: 1.6; color: #1d2939; white-space: pre-wrap;">${sanitize(message)}</div>
-          </div>
-
-          <div style="text-align: center; margin-bottom: 20px;">
-            <a href="mailto:${sanitize(email)}?subject=Re:%20[Pingava%20%23${ticketId}]%20${encodeURIComponent(subject)}" style="display: inline-block; background: #087a4b; color: #ffffff; font-weight: 600; font-size: 14px; padding: 10px 24px; border-radius: 6px; text-decoration: none;">Reply to ${sanitize(email)}</a>
-          </div>
-
-          <p style="font-size: 12px; color: #667085; text-align: center; margin: 0;">You can also simply click 'Reply' in your email client; it will respond to ${sanitize(email)} automatically.</p>
-        </div>`
+        text: teamEmailData.text,
+        html: teamEmailData.html,
       });
 
       // 2. Send acknowledgment confirmation to the visitor's Work Email
+      const ackEmailData = renderContactInquiryAckEmail({
+        ticketId,
+        topic,
+        subject,
+        message,
+        email,
+      });
+
       const userResult = await sendEmailAlert({
         to: email,
         fromName: "Pingava Support",
         replyTo: "connect@pingava.com",
         subject: `[Pingava] Inquiry Received - Ticket #${ticketId}`,
-        text: `Hello,\n\nThank you for contacting Pingava. We received your inquiry regarding "${topic}" (Ticket #${ticketId}):\n\nSubject: ${subject}\n\nMessage:\n${message}\n\nOur team has received your query at connect@pingava.com and will follow up with you shortly.\n\nBest regards,\nPingava Reliability Team\nconnect@pingava.com`,
-        html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 28px 24px; border: 1px solid #e4e7ec; border-radius: 10px; color: #1d2939; background: #ffffff;">
-          <div style="margin-bottom: 20px;">
-            <h2 style="margin: 0; color: #087a4b; font-size: 24px; font-weight: 800; letter-spacing: -0.02em;">pingava</h2>
-            <span style="display: inline-block; margin-top: 6px; background: rgba(18, 183, 106, 0.12); color: #087a4b; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 9999px;">Inquiry Ticket #${ticketId}</span>
-          </div>
-          <p style="font-size: 15px; line-height: 1.6; margin: 0 0 16px;">Hello,</p>
-          <p style="font-size: 15px; line-height: 1.6; margin: 0 0 18px;">Thank you for contacting Pingava. We have received your inquiry regarding <strong>${sanitize(topic)}</strong> and assigned it ticket reference <strong>#${ticketId}</strong>.</p>
-          <div style="background: #f8faf9; border: 1px solid #e4e7ec; border-radius: 8px; padding: 18px 20px; margin: 20px 0;">
-            <p style="margin: 0 0 8px; font-weight: 700; font-size: 14px; color: #1d2939;">Subject: ${sanitize(subject)}</p>
-            <p style="margin: 0; font-size: 13px; color: #475467; white-space: pre-wrap; line-height: 1.6;">${sanitize(message)}</p>
-          </div>
-          <p style="font-size: 14px; line-height: 1.6; color: #475467;">Our team is reviewing your message and will follow up with you directly at <strong>${sanitize(email)}</strong>.</p>
-          <p style="font-size: 14px; line-height: 1.6; color: #475467;">If you have additional details to share, reply directly to this email or write to <a href="mailto:connect@pingava.com" style="color: #087a4b; font-weight: 600;">connect@pingava.com</a>.</p>
-          <hr style="border: none; border-top: 1px solid #eaecf0; margin: 24px 0;" />
-          <p style="font-size: 12px; color: #98a2b3; margin: 0;">© 2026 Pingava. Next-Gen Website & API Synthetic Uptime Monitoring.</p>
-        </div>`
+        text: ackEmailData.text,
+        html: ackEmailData.html,
       });
 
       console.log(`[Contact Form] Inquiry #${ticketId} from ${email} sent to ${inquiryDestinations} (team alert: ${teamAlertResult.success}, user ack: ${userResult.success})`);
@@ -5585,40 +5498,32 @@ welcome@pingava.com`;
     const safeNewEmail = String(newEmail).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
     // 1. Dispatch confirmation link to the requested new email
+    const confirmEmailData = renderEmailChangeConfirmEmail({
+      userName: String(user.name || "Pingava User"),
+      oldEmail: user.email,
+      newEmail,
+      confirmUrl,
+    });
+
     void sendEmailAlert({
       to: newEmail,
       subject: "[Pingava] Confirm your new email address",
-      text: `Hello ${user.name},\n\nA request was made to update your Pingava account email address to ${newEmail}.\n\nClick the link below to confirm this change (valid for 2 hours):\n${confirmUrl}\n\nIf you did not request this change, please ignore this email.\n\nBest regards,\nPingava Reliability Team`,
-      html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px; color: #1a202c;">
-        <h2 style="color: #0f766e; margin-top: 0;">Confirm your new email address</h2>
-        <p>Hello <strong>${safeName}</strong>,</p>
-        <p>A request was made to change your Pingava workspace email from <code>${safeOldEmail}</code> to <code>${safeNewEmail}</code>.</p>
-        <p>Click the button below to confirm this update (link valid for 2 hours):</p>
-        <div style="margin: 24px 0;">
-          <a href="${confirmUrl}" style="background: #0f766e; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; display: inline-block;">Confirm Email Change</a>
-        </div>
-        <p style="font-size: 13px; color: #64748b;">Or copy and paste this URL into your browser:<br/><a href="${confirmUrl}" style="color: #0f766e; word-break: break-all;">${confirmUrl}</a></p>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-        <p style="font-size: 12px; color: #94a3b8;">If you did not request this change, please ignore this email.</p>
-      </div>`
+      text: confirmEmailData.text,
+      html: confirmEmailData.html,
     }).catch(() => {});
 
     // 2. Dispatch security notice to the current email address immediately
+    const securityEmailData = renderEmailChangeSecurityAlertEmail({
+      userName: String(user.name || "Pingava User"),
+      oldEmail: user.email,
+      newEmail,
+    });
+
     void sendEmailAlert({
       to: user.email,
       subject: "🚨 [Security Alert] Email change requested for your Pingava account",
-      text: `Hello ${user.name},\n\nA request was submitted to change your Pingava workspace email from ${user.email} to ${newEmail}.\n\nIf you initiated this change, please check your new inbox at ${newEmail} to confirm it.\n\nIf you did NOT request this, someone may have accessed your account. Please log in immediately and update your password or contact support at support@pingava.com.\n\nBest regards,\nPingava Security Team`,
-      html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #fed7aa; border-radius: 8px; color: #1a202c; background: #fffaf0;">
-        <h2 style="color: #c2410c; margin-top: 0;">🚨 Security Notice: Email Change Requested</h2>
-        <p>Hello <strong>${safeName}</strong>,</p>
-        <p>A request was recently submitted to change your Pingava account email address to <strong>${safeNewEmail}</strong>.</p>
-        <p>If you made this request, a confirmation link was sent to <strong>${safeNewEmail}</strong>.</p>
-        <div style="background: #ffffff; border: 1px solid #fdba74; padding: 14px; border-radius: 6px; font-size: 13px; color: #9a3412; margin: 16px 0;">
-          <strong>Didn't request this?</strong> If you did not make this change, please sign into your Pingava dashboard, update your password immediately, or contact <a href="mailto:support@pingava.com" style="color: #c2410c;">support@pingava.com</a>.
-        </div>
-        <hr style="border: none; border-top: 1px solid #fed7aa; margin: 20px 0;" />
-        <p style="font-size: 12px; color: #9a3412;">Pingava Security Team</p>
-      </div>`
+      text: securityEmailData.text,
+      html: securityEmailData.html,
     }).catch(() => {});
 
     res.json({ message: "Verification link sent to your new email address. Please check your inbox to confirm." });
@@ -5798,19 +5703,19 @@ welcome@pingava.com`;
     }
     try {
       const ownerEmail = process.env.OWNER_EMAIL || user.email || "avinash217k@gmail.com";
+      const emailData = renderMetaGuardianAlertEmail({
+        title: "Meta-Guardian Alert Dispatcher Verification",
+        message: `This is a test alert verifying that the Pingava Meta-Guardian self-monitoring notification pipeline is operational.\nTriggered by: ${user.email}`,
+        revision: process.env.K_REVISION || 'local',
+        timestamp: new Date().toISOString(),
+        isTest: true,
+      });
+
       const result = await sendEmailAlert({
         to: ownerEmail,
         subject: "🚨 [Pingava Observability TEST] Meta-Guardian Alert Dispatcher Verification",
-        text: `This is a test alert verifying that the Pingava Meta-Guardian self-monitoring notification pipeline is operational.\n\nTimestamp: ${new Date().toISOString()}\nRevision: ${process.env.K_REVISION || 'local'}\nTriggered by: ${user.email}`,
-        html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px; background: #0f172a; color: #f8fafc; border-radius: 10px; max-width: 600px; border: 1px solid #334155;">
-          <h2 style="color: #38bdf8; margin: 0 0 12px 0;">🛡️ Pingava Meta-Guardian Test Alert</h2>
-          <p style="color: #cbd5e1; font-size: 15px; margin: 0 0 16px 0;">This is a test notification confirming that the Pingava Meta-Guardian self-observability and watchdog alerting engine is functioning properly.</p>
-          <div style="background: #1e293b; padding: 14px; border-radius: 6px; font-size: 13px; color: #94a3b8; line-height: 1.6;">
-            <div>Triggered by: <strong style="color: #f1f5f9;">${user.email}</strong></div>
-            <div>Server Time: <strong style="color: #f1f5f9;">${new Date().toISOString()}</strong></div>
-            <div>Cloud Run Revision: <code>${process.env.K_REVISION || 'local'}</code></div>
-          </div>
-        </div>`
+        text: emailData.text,
+        html: emailData.html,
       });
       res.json({
         success: true,
@@ -5972,9 +5877,20 @@ welcome@pingava.com`;
       html = html.replace(/<meta\s+name="pingava-analytics-[^"]*"\s+content="[^"]*"\s*\/?>\n?/gi, "");
       html = html.replace("</head>", `  ${metaTags}\n  </head>`);
 
-      // Task 1: SSR / Pre-rendered semantic HTML for public marketing pages
-      if (isPublicPagePath(req.path)) {
-        html = injectPublicPageIntoHtml(html, req.path);
+      const reqHost = (req.hostname || "").toLowerCase();
+      const isCustomStatusDomain = Boolean(
+        statusPageConfig.custom_domain &&
+        reqHost === statusPageConfig.custom_domain.toLowerCase()
+      );
+
+      if (isCustomStatusDomain) {
+        html = html.replace("</head>", `  <script>window.__PINGAVA_CUSTOM_DOMAIN_SLUG__ = ${JSON.stringify(statusPageConfig.slug)};</script>\n  </head>`);
+      }
+
+      // Task 1: SSR / Pre-rendered semantic HTML for public marketing pages & custom status domains
+      if (isPublicPagePath(req.path) || (isCustomStatusDomain && (req.path === "/" || req.path === ""))) {
+        const targetPath = isCustomStatusDomain && (req.path === "/" || req.path === "") ? `/status/${statusPageConfig.slug}` : req.path;
+        html = injectPublicPageIntoHtml(html, targetPath);
         res.setHeader("X-Robots-Tag", "index, follow, all");
         res.setHeader("Access-Control-Allow-Origin", "*");
         res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");

@@ -38,7 +38,7 @@ export interface WebhookDispatchResult {
 /**
  * Detects the destination webhook service from the URL format.
  */
-export function detectWebhookService(url: string): 'slack' | 'discord' | 'telegram' | 'generic' {
+export function detectWebhookService(url: string): 'slack' | 'discord' | 'telegram' | 'pagerduty' | 'opsgenie' | 'generic' {
   const normalized = String(url || '').toLowerCase();
   if (normalized.includes('hooks.slack.com/services/')) {
     return 'slack';
@@ -48,6 +48,12 @@ export function detectWebhookService(url: string): 'slack' | 'discord' | 'telegr
   }
   if (normalized.includes('api.telegram.org')) {
     return 'telegram';
+  }
+  if (normalized.includes('events.pagerduty.com')) {
+    return 'pagerduty';
+  }
+  if (normalized.includes('api.opsgenie.com') || normalized.includes('api.eu.opsgenie.com')) {
+    return 'opsgenie';
   }
   return 'generic';
 }
@@ -281,6 +287,86 @@ export function buildTelegramPayload(payload: WebhookDispatchPayload, targetUrl:
 }
 
 /**
+ * Formats a PagerDuty Events API v2 payload.
+ */
+export function buildPagerDutyPayload(payload: WebhookDispatchPayload, targetUrl: string) {
+  let routingKey = 'unknown';
+  try {
+    const parsed = new URL(targetUrl);
+    routingKey = parsed.searchParams.get('routing_key') || parsed.searchParams.get('routingKey') || parsed.pathname.split('/').filter(Boolean).pop() || 'unknown';
+  } catch {}
+
+  const isDown = payload.kind === 'down';
+  const isRecovery = payload.kind === 'recovery';
+  const isSsl = payload.kind === 'ssl_expiring';
+
+  const severity = isDown ? 'critical' : isRecovery ? 'info' : isSsl ? 'warning' : 'info';
+  const action = isRecovery ? 'resolve' : 'trigger';
+
+  return {
+    routing_key: routingKey,
+    event_action: action,
+    dedup_key: `pingava_monitor_${payload.monitor.id}`,
+    payload: {
+      summary: isDown
+        ? `[CRITICAL] ${payload.monitor.name} is DOWN (${payload.incident?.error || 'Unresponsive'})`
+        : isRecovery
+        ? `[RESOLVED] ${payload.monitor.name} is operational`
+        : isSsl
+        ? `[WARNING] SSL certificate for ${payload.monitor.name} is expiring`
+        : `[TEST] Pingava active monitor test: ${payload.monitor.name}`,
+      source: payload.monitor.url,
+      severity,
+      timestamp: payload.incident?.timestamp || new Date().toISOString(),
+      component: 'Synthetic Monitor',
+      group: 'Uptime & Reliability',
+      custom_details: {
+        monitor_id: payload.monitor.id,
+        monitor_name: payload.monitor.name,
+        target_url: payload.monitor.url,
+        status: payload.monitor.status,
+        response_time_ms: payload.incident?.response_time_ms ?? null,
+        error: payload.incident?.error ?? null,
+        dashboard_url: payload.dashboard_url || 'https://dashboard.pingava.com/monitors'
+      }
+    },
+    links: [
+      {
+        href: payload.dashboard_url || 'https://dashboard.pingava.com/monitors',
+        text: 'View in Pingava Workspace'
+      }
+    ]
+  };
+}
+
+/**
+ * Formats an OpsGenie Alert API payload.
+ */
+export function buildOpsGeniePayload(payload: WebhookDispatchPayload) {
+  const isDown = payload.kind === 'down';
+  const isRecovery = payload.kind === 'recovery';
+  const isSsl = payload.kind === 'ssl_expiring';
+
+  return {
+    message: isDown
+      ? `[Pingava] ${payload.monitor.name} is DOWN`
+      : isRecovery
+      ? `[Pingava] ${payload.monitor.name} is back UP`
+      : `[Pingava] SSL Certificate Alert: ${payload.monitor.name}`,
+    alias: `pingava_monitor_${payload.monitor.id}`,
+    description: `Incident on ${payload.monitor.name} (${payload.monitor.url}). Current Status: ${payload.monitor.status}. Error: ${payload.incident?.error || 'N/A'}. Latency: ${payload.incident?.response_time_ms || 0}ms.`,
+    priority: isDown ? 'P1' : isSsl ? 'P3' : 'P4',
+    source: 'Pingava Uptime Engine',
+    tags: ['Pingava', 'SyntheticProbe', payload.kind],
+    details: {
+      monitor_id: String(payload.monitor.id),
+      target_url: payload.monitor.url,
+      dashboard: payload.dashboard_url || 'https://dashboard.pingava.com/monitors'
+    }
+  };
+}
+
+/**
  * Dispatches an alert to an external webhook URL with proper formatting, timeout, and response tracking.
  */
 export async function dispatchWebhook(
@@ -322,6 +408,10 @@ export async function dispatchWebhook(
       }
     } catch {}
     requestBody = buildTelegramPayload(payload, effectiveUrl);
+  } else if (service === 'pagerduty') {
+    requestBody = buildPagerDutyPayload(payload, effectiveUrl);
+  } else if (service === 'opsgenie') {
+    requestBody = buildOpsGeniePayload(payload);
   } else {
     requestBody = buildGenericPayload(payload);
   }

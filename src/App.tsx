@@ -7,6 +7,7 @@ import {
 import { api, normalizeEndpointUrl, session, userFacingError, type AlertDelivery, type Dashboard, type Monitor, type MonitorDetail as MonitorDetailData, type User, type WebhookChannel, type WebhookDelivery } from './api'
 import './App.css'
 import { PublicStatusPage, StatusPageSettings } from './StatusPages'
+import { SslFleetGuardianCard } from './SslCertificateGuardian'
 import { AccountSettings, type SettingsTab } from './AccountSettings'
 import { AccountMenu } from './AccountMenu'
 import { ResetPassword } from './ResetPassword'
@@ -96,6 +97,8 @@ function AuthScreen({ onAuth, initialMode = 'login' }: { onAuth: (user: User) =>
     try { return sessionStorage.getItem('pingava_handshake_token') || '' } catch { return '' }
   })
   const [handshakeActivated, setHandshakeActivated] = useState(false)
+  const [popupToast, setPopupToast] = useState<{ title: string; message: string } | null>(null)
+  const activatedRef = useRef(false)
   const googleButton = useRef<HTMLDivElement>(null)
   const [googleClientId, setGoogleClientId] = useState<string>(
     () => "617326161009-qmjsi9aanmsa73e2qa0i4js0ak6l4fg3.apps.googleusercontent.com"
@@ -116,28 +119,45 @@ function AuthScreen({ onAuth, initialMode = 'login' }: { onAuth: (user: User) =>
       .catch(() => {})
   }, [])
 
+  useEffect(() => {
+    if (!popupToast) return
+    const timer = setTimeout(() => {
+      setPopupToast(null)
+    }, 4500)
+    return () => clearTimeout(timer)
+  }, [popupToast])
+
   // Live Email Verification Handoff: Listen across tabs and poll backend while waiting for email verification
   useEffect(() => {
-    if (!verificationEmail || !handshakeToken || handshakeActivated) return
+    if (!verificationEmail || !handshakeToken || activatedRef.current) return
 
-    let isMounted = true
     let pollTimer: ReturnType<typeof setInterval> | null = null
+    let bc: BroadcastChannel | null = null
 
     const handleActivatedUser = (authedUser: User) => {
-      if (!isMounted || handshakeActivated) return
+      if (activatedRef.current) return
+      activatedRef.current = true
       setHandshakeActivated(true)
+      if (pollTimer) {
+        clearInterval(pollTimer)
+        pollTimer = null
+      }
       try { sessionStorage.removeItem('pingava_handshake_token') } catch {}
       identifyUser(authedUser.id, { auth_provider: authedUser.auth_provider })
       trackEvent('user_signed_up_live_handoff', { signup_method: 'password' })
+
       setTimeout(() => {
-        if (isMounted) {
+        try {
           onAuth(authedUser)
+        } catch {}
+        const target = dashboardHref('/overview')
+        if (typeof window !== 'undefined') {
+          window.location.replace(target)
         }
-      }, 750)
+      }, 850)
     }
 
     // 1. Instant cross-tab sync via BroadcastChannel (if verified in another tab on the same laptop)
-    let bc: BroadcastChannel | null = null
     try {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         bc = new BroadcastChannel('pingava_auth')
@@ -151,7 +171,7 @@ function AuthScreen({ onAuth, initialMode = 'login' }: { onAuth: (user: User) =>
 
     // 2. Cross-device polling (if verified on phone, tablet, or another browser)
     const checkStatus = async () => {
-      if (!isMounted || handshakeActivated) return
+      if (activatedRef.current) return
       try {
         const res = await api<{ verified: boolean; user?: User; expired?: boolean }>(
           `/auth/verification-status?token=${encodeURIComponent(handshakeToken)}`
@@ -169,13 +189,12 @@ function AuthScreen({ onAuth, initialMode = 'login' }: { onAuth: (user: User) =>
     pollTimer = setInterval(checkStatus, 2500)
 
     return () => {
-      isMounted = false
       if (pollTimer) clearInterval(pollTimer)
       if (bc) {
         try { bc.close() } catch {}
       }
     }
-  }, [verificationEmail, handshakeToken, handshakeActivated, onAuth])
+  }, [verificationEmail, handshakeToken, onAuth])
 
   useEffect(() => {
     if (!googleClientId || mode === 'forgot') return
@@ -242,8 +261,24 @@ function AuthScreen({ onAuth, initialMode = 'login' }: { onAuth: (user: User) =>
     const values = mode === 'register' ? { name, email, password, accepted_terms: true } : Object.fromEntries(formData)
     try {
       if (mode === 'forgot') {
-        const result = await api<{ message: string }>('/auth/forgot-password', { method: 'POST', body: JSON.stringify(values) })
-        setNotice(result.message)
+        try {
+          const result = await api<{ message: string }>('/auth/forgot-password', { method: 'POST', body: JSON.stringify(values) })
+          setPopupToast(null)
+          setError('')
+          setNotice(result.message)
+        } catch (reason: any) {
+          const isNotFound = reason?.not_found || reason?.status === 404 || String(reason?.message || '').toLowerCase().includes('no account')
+          if (isNotFound) {
+            setNotice('')
+            setError('')
+            setPopupToast({
+              title: 'Failed',
+              message: 'No account found for this email.'
+            })
+          } else {
+            setError(userFacingError(reason, 'Could not process password reset request. Please try again.'))
+          }
+        }
         return
       }
       if (mode === 'register') {
@@ -278,9 +313,34 @@ function AuthScreen({ onAuth, initialMode = 'login' }: { onAuth: (user: User) =>
   const clearFieldError = (name: string) => setFieldErrors((current) => { if (!current[name]) return current; const next = { ...current }; delete next[name]; return next })
   const passwordField = (name: 'password' | 'confirm_password', label: string, placeholder: string, visible: boolean, toggle: () => void) => <label htmlFor={`auth-${name}`}>{label}<span className="password-input"><input id={`auth-${name}`} name={name} type={visible ? 'text' : 'password'} required minLength={name === 'password' ? 8 : undefined} maxLength={128} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder={placeholder} aria-invalid={Boolean(fieldErrors[name])} aria-describedby={fieldErrors[name] ? `${name}-error` : undefined} onChange={() => clearFieldError(name)} /><button type="button" onClick={toggle} aria-label={`${visible ? 'Hide' : 'Show'} ${label.toLowerCase()}`}>{visible ? <EyeOff size={17} /> : <Eye size={17} />}</button></span>{fieldErrors[name] && <small className="field-error" id={`${name}-error`}>{fieldErrors[name]}</small>}</label>
 
-  if (verificationEmail) return <div className="auth-page"><PageMetadata /><section className="auth-brand"><BrandLockup /><div className="auth-message"><p>{handshakeActivated ? 'WORKSPACE ACTIVATED' : 'ONE QUICK STEP'}</p><h1>{handshakeActivated ? 'Email verified! Welcome to Pingava.' : 'Your workspace is almost ready.'}</h1><span>{handshakeActivated ? 'Connecting you to your live monitoring fleet...' : 'Confirm your email, then Pingava can start watching the services that matter.'}</span></div></section><section className="auth-form-wrap"><div className="auth-form auth-confirmation">{handshakeActivated ? <CheckCircle2 size={40} color="#10b981" /> : <CheckCircle2 size={34} />}<div><h2>{handshakeActivated ? 'Account Verified!' : 'Check your inbox'}</h2><p>{handshakeActivated ? 'Your email has been successfully confirmed. Launching dashboard...' : <>We sent a verification link to <strong>{verificationEmail}</strong>. Tap the link on your phone or laptop to automatically enter your dashboard.</>}</p>{!handshakeActivated && <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 14px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: '20px', fontSize: '12px', color: '#34d399', margin: '14px 0 6px 0', fontWeight: 500 }}><span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 10px #10b981' }} /><span>Listening for verification...</span></div>}</div>{!handshakeActivated && <><button className="secondary-btn" disabled={loading} onClick={async () => { setLoading(true); setError(''); try { const result = await api<{ message: string; handshake_token?: string }>('/auth/resend-verification', { method: 'POST', body: JSON.stringify({ email: verificationEmail }) }); if (result.handshake_token) { setHandshakeToken(result.handshake_token); try { sessionStorage.setItem('pingava_handshake_token', result.handshake_token) } catch {} } setError(result.message) } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not resend verification') } finally { setLoading(false) } }}>{loading ? 'Sending...' : 'Resend verification email'}</button>{error && <div className="form-note">{error}</div>}<a href="/login" className="auth-switch" onClick={() => { try { sessionStorage.removeItem('pingava_handshake_token') } catch {} }}>Return to sign in</a></>}</div></section></div>
+  const renderPopupToast = popupToast ? (
+    <div className="running-popup-wrap" role="alert" aria-live="assertive">
+      <div className="running-popup">
+        <div className="running-popup-inner">
+          <div className="running-popup-icon">
+            <TriangleAlert size={16} />
+          </div>
+          <div className="running-popup-content">
+            <div className="running-popup-title">{popupToast.title}</div>
+            <p className="running-popup-text">{popupToast.message}</p>
+          </div>
+          <button
+            type="button"
+            className="running-popup-close"
+            onClick={() => setPopupToast(null)}
+            aria-label="Close notification"
+          >
+            <X size={14} />
+          </button>
+        </div>
+        <div className="running-popup-bar" />
+      </div>
+    </div>
+  ) : null
 
-  return <div className="auth-page"><PageMetadata /><section className="auth-brand"><BrandLockup /><div className="auth-message"><p>WEBSITE &amp; API MONITORING</p><h1>Know before your users do.</h1><span>Monitor uptime, APIs and performance. Get alerted the moment something breaks.</span></div><div className="monitor-preview" aria-label="Live monitoring preview"><div className="monitor-preview-head"><span>Live services</span><strong><i />All operational</strong></div>{previewServices.map(([name, responseTime]) => <div className="monitor-preview-row" key={name}><i /><strong>{name}</strong><span>Operational</span><b>{responseTime}</b></div>)}</div></section><section className="auth-form-wrap"><form className="auth-form" onSubmit={submit} noValidate={mode === 'register'}><div><h2>{mode === 'register' ? 'Create your workspace' : mode === 'forgot' ? 'Reset your password' : 'Welcome back'}</h2><p>{mode === 'register' ? 'Start monitoring your first website or API in under 2 minutes.' : mode === 'forgot' ? 'We will email you a secure reset link.' : 'Sign in to view your monitors.'}</p></div>{mode === 'register' && queryTargetUrl && <div style={{ background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '8px', padding: '0.65rem 0.9rem', marginBottom: '1rem', fontSize: '0.84rem', color: '#7dd3fc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Zap size={15} color="#38bdf8" /><span>Target endpoint: <strong style={{ color: '#f8fafc' }}>{queryTargetUrl}</strong></span></div>}{googleClientId && mode !== 'forgot' && <><div className="google-signin" ref={googleButton} /><div className="auth-divider"><span>or continue with email</span></div></>}{mode === 'register' && <label htmlFor="auth-name">Full name<input id="auth-name" name="name" required minLength={2} maxLength={80} autoComplete="name" placeholder="Your full name" aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? 'name-error' : undefined} onChange={() => clearFieldError('name')} />{fieldErrors.name && <small className="field-error" id="name-error">{fieldErrors.name}</small>}</label>}<label htmlFor="auth-email">Email address<input id="auth-email" name="email" type="email" required autoComplete="email" placeholder="you@company.com" aria-invalid={Boolean(fieldErrors.email)} aria-describedby={fieldErrors.email ? 'email-error' : undefined} onChange={() => clearFieldError('email')} />{fieldErrors.email && <small className="field-error" id="email-error">{fieldErrors.email}</small>}</label>{mode !== 'forgot' && passwordField('password', 'Password', 'At least 8 characters', showPassword, () => setShowPassword((value) => !value))}{mode === 'register' && <>{passwordField('confirm_password', 'Confirm password', 'Re-enter your password', showConfirmation, () => setShowConfirmation((value) => !value))}<label className="terms-consent"><input name="terms" type="checkbox" aria-invalid={Boolean(fieldErrors.terms)} aria-describedby={fieldErrors.terms ? 'terms-error' : undefined} onChange={() => clearFieldError('terms')} /><span>I agree to the <a href="/terms-of-service">Terms of Service</a> and <a href="/privacy-policy">Privacy Policy</a></span>{fieldErrors.terms && <small className="field-error" id="terms-error">{fieldErrors.terms}</small>}</label></>}{notice && <div className="form-note">{notice}</div>}{error && <div className="form-error">{error}</div>}<button className="primary-btn auth-submit" disabled={loading}>{loading ? 'Please wait...' : mode === 'register' ? 'Create free account \u2192' : mode === 'forgot' ? 'Send reset link' : 'Sign in'}</button>{mode === 'register' && <p className="auth-reassurance">No credit card required</p>}{mode === 'login' && <button type="button" className="auth-switch" onClick={() => { setMode('forgot'); setError(''); setNotice(''); setFieldErrors({}) }}>Forgot password?</button>}<button type="button" className="auth-switch" onClick={() => { setMode(mode === 'register' ? 'login' : mode === 'login' ? 'register' : 'login'); setError(''); setNotice(''); setFieldErrors({}) }}>{mode === 'register' ? 'Already have an account? Sign in' : mode === 'forgot' ? 'Back to sign in' : 'New to Pingava? Create an account'}</button></form></section></div>
+  if (verificationEmail) return <div className="auth-page">{renderPopupToast}<PageMetadata /><section className="auth-brand"><BrandLockup /><div className="auth-message"><p>{handshakeActivated ? 'WORKSPACE ACTIVATED' : 'ONE QUICK STEP'}</p><h1>{handshakeActivated ? 'Email verified! Welcome to Pingava.' : 'Your workspace is almost ready.'}</h1><span>{handshakeActivated ? 'Connecting you to your live monitoring fleet...' : 'Confirm your email, then Pingava can start watching the services that matter.'}</span></div></section><section className="auth-form-wrap"><div className="auth-form auth-confirmation">{handshakeActivated ? <CheckCircle2 size={40} color="#10b981" /> : <CheckCircle2 size={34} />}<div><h2>{handshakeActivated ? 'Account Verified!' : 'Check your inbox'}</h2><p>{handshakeActivated ? 'Your email has been successfully confirmed. Launching dashboard...' : <>We sent a verification link to <strong>{verificationEmail}</strong>. Tap the link on your phone or laptop to automatically enter your dashboard.</>}</p>{!handshakeActivated && <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 14px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: '20px', fontSize: '12px', color: '#34d399', margin: '14px 0 6px 0', fontWeight: 500 }}><span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 10px #10b981' }} /><span>Listening for verification...</span></div>}</div>{!handshakeActivated && <><button className="secondary-btn" disabled={loading} onClick={async () => { setLoading(true); setError(''); try { const result = await api<{ message: string; handshake_token?: string }>('/auth/resend-verification', { method: 'POST', body: JSON.stringify({ email: verificationEmail }) }); if (result.handshake_token) { setHandshakeToken(result.handshake_token); try { sessionStorage.setItem('pingava_handshake_token', result.handshake_token) } catch {} } setError(result.message) } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not resend verification') } finally { setLoading(false) } }}>{loading ? 'Sending...' : 'Resend verification email'}</button>{error && <div className="form-note">{error}</div>}<a href="/login" className="auth-switch" onClick={() => { try { sessionStorage.removeItem('pingava_handshake_token') } catch {} }}>Return to sign in</a></>}</div></section></div>
+
+  return <div className="auth-page">{renderPopupToast}<PageMetadata /><section className="auth-brand"><BrandLockup /><div className="auth-message"><p>WEBSITE &amp; API MONITORING</p><h1>Know before your users do.</h1><span>Monitor uptime, APIs and performance. Get alerted the moment something breaks.</span></div><div className="monitor-preview" aria-label="Live monitoring preview"><div className="monitor-preview-head"><span>Live services</span><strong><i />All operational</strong></div>{previewServices.map(([name, responseTime]) => <div className="monitor-preview-row" key={name}><i /><strong>{name}</strong><span>Operational</span><b>{responseTime}</b></div>)}</div></section><section className="auth-form-wrap"><form className="auth-form" onSubmit={submit} noValidate={mode === 'register'}><div><h2>{mode === 'register' ? 'Create your workspace' : mode === 'forgot' ? 'Reset your password' : 'Welcome back'}</h2><p>{mode === 'register' ? 'Start monitoring your first website or API in under 2 minutes.' : mode === 'forgot' ? 'We will email you a secure reset link.' : 'Sign in to view your monitors.'}</p></div>{mode === 'register' && queryTargetUrl && <div style={{ background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '8px', padding: '0.65rem 0.9rem', marginBottom: '1rem', fontSize: '0.84rem', color: '#7dd3fc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Zap size={15} color="#38bdf8" /><span>Target endpoint: <strong style={{ color: '#f8fafc' }}>{queryTargetUrl}</strong></span></div>}{googleClientId && mode !== 'forgot' && <><div className="google-signin" ref={googleButton} /><div className="auth-divider"><span>or continue with email</span></div></>}{mode === 'register' && <label htmlFor="auth-name">Full name<input id="auth-name" name="name" required minLength={2} maxLength={80} autoComplete="name" placeholder="Your full name" aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? 'name-error' : undefined} onChange={() => clearFieldError('name')} />{fieldErrors.name && <small className="field-error" id="name-error">{fieldErrors.name}</small>}</label>}<label htmlFor="auth-email">Email address<input id="auth-email" name="email" type="email" required autoComplete="email" placeholder="you@company.com" aria-invalid={Boolean(fieldErrors.email)} aria-describedby={fieldErrors.email ? 'email-error' : undefined} onChange={() => clearFieldError('email')} />{fieldErrors.email && <small className="field-error" id="email-error">{fieldErrors.email}</small>}</label>{mode !== 'forgot' && passwordField('password', 'Password', 'At least 8 characters', showPassword, () => setShowPassword((value) => !value))}{mode === 'register' && <>{passwordField('confirm_password', 'Confirm password', 'Re-enter your password', showConfirmation, () => setShowConfirmation((value) => !value))}<label className="terms-consent"><input name="terms" type="checkbox" aria-invalid={Boolean(fieldErrors.terms)} aria-describedby={fieldErrors.terms ? 'terms-error' : undefined} onChange={() => clearFieldError('terms')} /><span>I agree to the <a href="/terms-of-service">Terms of Service</a> and <a href="/privacy-policy">Privacy Policy</a></span>{fieldErrors.terms && <small className="field-error" id="terms-error">{fieldErrors.terms}</small>}</label></>}{notice && <div className="form-note">{notice}</div>}{error && <div className="form-error">{error}</div>}<button className="primary-btn auth-submit" disabled={loading}>{loading ? 'Please wait...' : mode === 'register' ? 'Create free account \u2192' : mode === 'forgot' ? 'Send reset link' : 'Sign in'}</button>{mode === 'register' && <p className="auth-reassurance">No credit card required</p>}{mode === 'login' && <button type="button" className="auth-switch" onClick={() => { setMode('forgot'); setError(''); setNotice(''); setFieldErrors({}); setPopupToast(null) }}>Forgot password?</button>}<button type="button" className="auth-switch" onClick={() => { setMode(mode === 'register' ? 'login' : mode === 'login' ? 'register' : 'login'); setError(''); setNotice(''); setFieldErrors({}); setPopupToast(null) }}>{mode === 'register' ? 'Already have an account? Sign in' : mode === 'forgot' ? 'Back to sign in' : 'New to Pingava? Create an account'}</button></form></section></div>
 }
 
 function NotFoundPage({ title }: { title: string }) {
@@ -573,6 +633,10 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
     ? 'discord'
     : inputUrl.includes('api.telegram.org')
     ? 'telegram'
+    : inputUrl.includes('events.pagerduty.com')
+    ? 'pagerduty'
+    : inputUrl.includes('api.opsgenie.com') || inputUrl.includes('api.eu.opsgenie.com')
+    ? 'opsgenie'
     : inputUrl.startsWith('https://')
     ? 'generic'
     : null;
@@ -594,7 +658,7 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
     return () => { document.removeEventListener('keydown', handleKey); trigger?.focus() }
   }, [showForm])
 
-  const applyPreset = (type: 'slack' | 'discord' | 'telegram' | 'generic') => {
+  const applyPreset = (type: 'slack' | 'discord' | 'telegram' | 'pagerduty' | 'opsgenie' | 'generic') => {
     if (type === 'slack') {
       setDefaultName('DevOps Slack Alerts');
       setInputUrl('https://hooks.slack.com/services/');
@@ -604,6 +668,12 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
     } else if (type === 'telegram') {
       setDefaultName('Telegram Phone Alerts');
       setInputUrl('https://api.telegram.org/bot<BOT_TOKEN>/sendMessage?chat_id=<CHAT_ID>');
+    } else if (type === 'pagerduty') {
+      setDefaultName('PagerDuty Incident Sync');
+      setInputUrl('https://events.pagerduty.com/v2/enqueue?routing_key=<ROUTING_KEY>');
+    } else if (type === 'opsgenie') {
+      setDefaultName('OpsGenie On-Call Alerts');
+      setInputUrl('https://api.opsgenie.com/v2/alerts');
     } else {
       setDefaultName('Custom Operations Webhook');
       setInputUrl('https://');
@@ -802,34 +872,48 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
           <form onSubmit={create} noValidate>
             <div style={{ marginBottom: 12 }}>
               <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 700, color: '#475569' }}>Quick Presets</p>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   onClick={() => applyPreset('telegram')}
-                  style={{ flex: 1, padding: '6px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #7dd3fc', background: '#f0f9ff', color: '#0284c7', cursor: 'pointer' }}
+                  style={{ flex: '1 1 auto', minWidth: '90px', padding: '6px 8px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #7dd3fc', background: '#f0f9ff', color: '#0284c7', cursor: 'pointer' }}
                 >
                   ✈️ Telegram
                 </button>
                 <button
                   type="button"
                   onClick={() => applyPreset('slack')}
-                  style={{ flex: 1, padding: '6px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #bae6fd', background: '#f0f9ff', color: '#0369a1', cursor: 'pointer' }}
+                  style={{ flex: '1 1 auto', minWidth: '80px', padding: '6px 8px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #bae6fd', background: '#f0f9ff', color: '#0369a1', cursor: 'pointer' }}
                 >
                   💬 Slack
                 </button>
                 <button
                   type="button"
                   onClick={() => applyPreset('discord')}
-                  style={{ flex: 1, padding: '6px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #ddd6fe', background: '#f5f3ff', color: '#6d28d9', cursor: 'pointer' }}
+                  style={{ flex: '1 1 auto', minWidth: '85px', padding: '6px 8px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #ddd6fe', background: '#f5f3ff', color: '#6d28d9', cursor: 'pointer' }}
                 >
                   🎮 Discord
                 </button>
                 <button
                   type="button"
-                  onClick={() => applyPreset('generic')}
-                  style={{ flex: 1, padding: '6px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', color: '#334155', cursor: 'pointer' }}
+                  onClick={() => applyPreset('pagerduty')}
+                  style={{ flex: '1 1 auto', minWidth: '95px', padding: '6px 8px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #86efac', background: '#f0fdf4', color: '#15803d', cursor: 'pointer' }}
                 >
-                  🌐 Custom Webhook
+                  📟 PagerDuty
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset('opsgenie')}
+                  style={{ flex: '1 1 auto', minWidth: '90px', padding: '6px 8px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #fed7aa', background: '#fff7ed', color: '#c2410c', cursor: 'pointer' }}
+                >
+                  🚨 OpsGenie
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset('generic')}
+                  style={{ flex: '1 1 auto', minWidth: '100px', padding: '6px 8px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', color: '#334155', cursor: 'pointer' }}
+                >
+                  🌐 Webhook
                 </button>
               </div>
             </div>
@@ -840,7 +924,7 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
                 name="name"
                 maxLength={80}
                 value={defaultName}
-                placeholder="e.g. Telegram Phone Alerts, #ops-incidents, DevOps Slack"
+                placeholder="e.g. Telegram Phone Alerts, #ops-incidents, DevOps Slack, PagerDuty"
                 aria-invalid={Boolean(formErrors.name)}
                 aria-describedby={formErrors.name ? 'webhook-name-error' : undefined}
                 onChange={(e) => { setDefaultName(e.target.value); setFormErrors((value) => ({ ...value, name: undefined })) }}
@@ -856,7 +940,7 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
                   name="url"
                   type="url"
                   value={inputUrl}
-                  placeholder="https://api.telegram.org/bot... or https://hooks.slack.com/... or https://discord.com/..."
+                  placeholder="https://api.telegram.org/bot... or https://hooks.slack.com/... or https://events.pagerduty.com/..."
                   aria-invalid={Boolean(formErrors.url)}
                   onChange={(e) => {
                     let val = e.target.value;
@@ -889,6 +973,16 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
               {detectedService === 'discord' && (
                 <small style={{ color: '#7c3aed', fontWeight: 600, display: 'block', marginTop: 4 }}>
                   ⚡ Discord Webhook detected • Pingava will dispatch rich Embed cards with status indicators.
+                </small>
+              )}
+              {detectedService === 'pagerduty' && (
+                <small style={{ color: '#15803d', fontWeight: 600, display: 'block', marginTop: 4 }}>
+                  ⚡ PagerDuty Events v2 detected • Pingava will dispatch automated triggers, severity levels, and auto-resolutions.
+                </small>
+              )}
+              {detectedService === 'opsgenie' && (
+                <small style={{ color: '#c2410c', fontWeight: 600, display: 'block', marginTop: 4 }}>
+                  ⚡ OpsGenie API detected • Pingava will dispatch prioritized incident alerts (P1 for downtime, P3 for SSL warnings).
                 </small>
               )}
               {detectedService === 'generic' && (
@@ -955,7 +1049,8 @@ function AlertChannels({ monitors, email, onRefresh }: { monitors: Monitor[]; em
 
 function DashboardApp({ initialAuthMode = 'login' }: { initialAuthMode?: 'login' | 'register' }) {
   const { theme, setTheme } = useTheme()
-  const publicSlug = window.location.pathname.match(/^\/status\/([a-z0-9-]+)\/?$/)?.[1]
+  const customSlug = (window as any).__PINGAVA_CUSTOM_DOMAIN_SLUG__
+  const publicSlug = customSlug || window.location.pathname.match(/^\/status\/([a-z0-9-]+)\/?$/)?.[1]
   const resetToken = window.location.pathname === '/reset-password' ? new URLSearchParams(window.location.search).get('token') : null
   const subscriptionAction = window.location.pathname === '/subscription/confirm' ? 'confirm' : window.location.pathname === '/unsubscribe' ? 'unsubscribe' : null
   const subscriptionToken = subscriptionAction ? new URLSearchParams(window.location.search).get('token') : null
@@ -1152,7 +1247,7 @@ function DashboardApp({ initialAuthMode = 'login' }: { initialAuthMode?: 'login'
         return
       }
       void loadDashboard()
-      if (window.location.pathname === '/login' || window.location.pathname === '/register') {
+      if (window.location.pathname === '/login' || window.location.pathname === '/register' || window.location.pathname === '/' || window.location.pathname === '') {
         window.history.replaceState({}, '', '/overview')
       }
     }} />
@@ -1182,7 +1277,7 @@ function DashboardApp({ initialAuthMode = 'login' }: { initialAuthMode?: 'login'
     )
   }</div><div className="uptime-cell"><strong>{(monitor.uptime ?? 100).toFixed(2)}%</strong><div className="mini-bars">{Array.from({ length: 12 }, (_, index) => <span key={index} style={{ height: `${45 + ((monitor.id + index) * 13) % 45}%` }} />)}</div></div><div className="response"><Clock3 size={14} />{monitor.response_time === null ? '—' : `${monitor.response_time} ms`}</div><div className="last-check">{monitor.last_checked_at ? new Date(monitor.last_checked_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Waiting'}</div><div className="row-actions"><button title="Run check" onClick={() => void updateMonitor(monitor, 'check')} disabled={monitor.status === 'paused'}><RefreshCw size={15} /></button><button title={monitor.status === 'paused' ? 'Resume' : 'Pause'} onClick={() => void updateMonitor(monitor, 'toggle')}>{monitor.status === 'paused' ? <Play size={15} /> : <Pause size={15} />}</button><button title="Delete" onClick={() => void updateMonitor(monitor, 'delete')}><Trash2 size={15} /></button></div></div>)}{!filtered.length && <div className="empty-state"><Activity size={24} /><strong>No monitors yet</strong><span>Add your first website or API endpoint.</span><button className="primary-btn" onClick={() => setShowAdd(true)}><Plus size={16} />Add monitor</button></div>}</div>
 
-  const content = active === 'status' ? <section className="monitors-section page-panel"><div className="section-title"><div><h2>Status page</h2><p>A simple public view of your services</p></div><span className="status-pill up"><Check size={13} />Operational</span></div><div className="status-preview"><div className="status-preview-head"><BrandMark /><div><strong>{user.name}'s services</strong><small>Service status powered by Pingava</small></div></div><h3>All systems operational</h3>{monitors.map((monitor) => <div className="service-line" key={monitor.id}><span>{monitor.name}</span><strong className={monitor.status === 'down' ? 'down-text' : ''}>{monitor.status === 'down' ? 'Outage' : monitor.status === 'paused' ? 'Paused' : 'Operational'}</strong></div>)}</div></section> : active === 'alerts' ? <section className="monitors-section page-panel"><div className="section-title"><div><h2>Alert channels</h2><p>Where outage and recovery alerts are delivered</p></div></div><div className="settings-list"><article><div className="setting-icon"><Bell size={18} /></div><div><strong>Email alerts</strong><p>Alerts are sent to {user.email} when SMTP is configured.</p></div><span className="status-pill up">Enabled</span></article></div></section> : active === 'settings' ? <section className="monitors-section page-panel"><div className="section-title"><div><h2>Workspace settings</h2><p>Your MVP account and usage</p></div></div><div className="settings-list"><article><div><strong>Workspace owner</strong><p>{user.name} · {user.email}</p></div></article><article><div><strong>Monitor allowance</strong><p>{monitors.length} of {data?.limit || 10} monitors used</p></div></article><button className="secondary-btn logout-btn" onClick={logout}><LogOut size={16} />Sign out</button></div></section> : <><section className="stats" aria-label="Monitoring summary"><article><div className={`stat-icon ${activeMonitors.length ? 'green' : 'gray'}`}><ShieldCheck size={19} /></div><div><span>Overall uptime</span><strong>{activeMonitors.length && averageUptime != null ? `${averageUptime.toFixed(2)}%` : '—'}</strong><small>{activeMonitors.length ? 'Based on recorded checks' : 'No monitors available'}</small></div></article><article><div className={`stat-icon ${activeMonitors.length ? 'blue' : 'gray'}`}><Zap size={19} /></div><div><span>Avg. response time</span><strong>{activeMonitors.length && averageResponse != null ? `${averageResponse} ms` : '—'}</strong><small>{activeMonitors.length ? 'Across active monitors' : 'No monitors available'}</small></div></article><article><div className={`stat-icon ${openIncidents.length ? 'amber' : activeMonitors.length ? 'green' : 'gray'}`}><TriangleAlert size={19} /></div><div><span>Active incidents</span><strong>{openIncidents.length}</strong><small>{!monitors.length ? 'No monitors available' : openIncidents.length ? 'Needs attention' : 'All systems operational'}</small></div></article><article><div className={`stat-icon ${activeMonitors.length ? 'violet' : 'gray'}`}><Radio size={19} /></div><div><span>Active monitors</span><strong>{activeMonitors.length}</strong><small>{monitors.length ? `${monitors.length - activeMonitors.length} paused` : '0 configured'}</small></div></article></section>{active === 'overview' && <section className="performance-panel"><div className="section-title"><div><h2>Recent response time</h2><p>Latest checks across your monitors</p></div><button className="icon-btn" title="Refresh" onClick={() => void loadDashboard()}><RefreshCw size={16} /></button></div><div className="chart-wrap"><div className="chart-y"><span>1s</span><span>750ms</span><span>500ms</span><span>250ms</span><span>0ms</span></div><div className="chart">{((data?.recent_checks || []).slice(0, 24).reverse()).map((check) => <span key={check.id} className={check.ok ? '' : 'failed'} style={{ height: `${Math.max(8, Math.min(100, check.response_time / 10))}%` }} />)}{!data?.recent_checks?.length && <div className="chart-empty">Response data will appear after the first checks.</div>}<div className="chart-x"><span>Earlier</span><span>Latest checks</span><span>Now</span></div></div></div></section>}<section className="monitors-section"><div className="section-title"><div><h2>{active === 'monitors' ? 'All monitors' : 'Your monitors'}</h2><p>{monitors.length} of {data?.limit || 10} monitors used</p></div>{active === 'overview' && <button className="text-btn" onClick={() => setActive('monitors')}>View all <ExternalLink size={15} /></button>}</div>{monitorTable}</section></>
+  const content = active === 'status' ? <section className="monitors-section page-panel"><div className="section-title"><div><h2>Status page</h2><p>A simple public view of your services</p></div><span className="status-pill up"><Check size={13} />Operational</span></div><div className="status-preview"><div className="status-preview-head"><BrandMark /><div><strong>{user.name}'s services</strong><small>Service status powered by Pingava</small></div></div><h3>All systems operational</h3>{monitors.map((monitor) => <div className="service-line" key={monitor.id}><span>{monitor.name}</span><strong className={monitor.status === 'down' ? 'down-text' : ''}>{monitor.status === 'down' ? 'Outage' : monitor.status === 'paused' ? 'Paused' : 'Operational'}</strong></div>)}</div></section> : active === 'alerts' ? <section className="monitors-section page-panel"><div className="section-title"><div><h2>Alert channels</h2><p>Where outage and recovery alerts are delivered</p></div></div><div className="settings-list"><article><div className="setting-icon"><Bell size={18} /></div><div><strong>Email alerts</strong><p>Alerts are sent to {user.email} when SMTP is configured.</p></div><span className="status-pill up">Enabled</span></article></div></section> : active === 'settings' ? <section className="monitors-section page-panel"><div className="section-title"><div><h2>Workspace settings</h2><p>Your MVP account and usage</p></div></div><div className="settings-list"><article><div><strong>Workspace owner</strong><p>{user.name} · {user.email}</p></div></article><article><div><strong>Monitor allowance</strong><p>{monitors.length} of {data?.limit || 10} monitors used</p></div></article><button className="secondary-btn logout-btn" onClick={logout}><LogOut size={16} />Sign out</button></div></section> : <><section className="stats" aria-label="Monitoring summary"><article><div className={`stat-icon ${activeMonitors.length ? 'green' : 'gray'}`}><ShieldCheck size={19} /></div><div><span>Overall uptime</span><strong>{activeMonitors.length && averageUptime != null ? `${averageUptime.toFixed(2)}%` : '—'}</strong><small>{activeMonitors.length ? 'Based on recorded checks' : 'No monitors available'}</small></div></article><article><div className={`stat-icon ${activeMonitors.length ? 'blue' : 'gray'}`}><Zap size={19} /></div><div><span>Avg. response time</span><strong>{activeMonitors.length && averageResponse != null ? `${averageResponse} ms` : '—'}</strong><small>{activeMonitors.length ? 'Across active monitors' : 'No monitors available'}</small></div></article><article><div className={`stat-icon ${openIncidents.length ? 'amber' : activeMonitors.length ? 'green' : 'gray'}`}><TriangleAlert size={19} /></div><div><span>Active incidents</span><strong>{openIncidents.length}</strong><small>{!monitors.length ? 'No monitors available' : openIncidents.length ? 'Needs attention' : 'All systems operational'}</small></div></article><article><div className={`stat-icon ${activeMonitors.length ? 'violet' : 'gray'}`}><Radio size={19} /></div><div><span>Active monitors</span><strong>{activeMonitors.length}</strong><small>{monitors.length ? `${monitors.length - activeMonitors.length} paused` : '0 configured'}</small></div></article></section>{active === 'overview' && <section className="performance-panel"><div className="section-title"><div><h2>Recent response time</h2><p>Latest checks across your monitors</p></div><button className="icon-btn" title="Refresh" onClick={() => void loadDashboard()}><RefreshCw size={16} /></button></div><div className="chart-wrap"><div className="chart-y"><span>1s</span><span>750ms</span><span>500ms</span><span>250ms</span><span>0ms</span></div><div className="chart">{((data?.recent_checks || []).slice(0, 24).reverse()).map((check) => <span key={check.id} className={check.ok ? '' : 'failed'} style={{ height: `${Math.max(8, Math.min(100, check.response_time / 10))}%` }} />)}{!data?.recent_checks?.length && <div className="chart-empty">Response data will appear after the first checks.</div>}<div className="chart-x"><span>Earlier</span><span>Latest checks</span><span>Now</span></div></div></div></section>}<section className="monitors-section"><div className="section-title"><div><h2>{active === 'monitors' ? 'All monitors' : 'Your monitors'}</h2><p>{monitors.length} of {data?.limit || 10} monitors used</p></div>{active === 'overview' && <button className="text-btn" onClick={() => setActive('monitors')}>View all <ExternalLink size={15} /></button>}</div>{monitorTable}</section>{active === 'monitors' && <SslFleetGuardianCard />}</>
 
   return <div className="app-shell"><PageMetadata title="Pingava dashboard" description="Your private Pingava monitoring dashboard." noIndex />
     <aside className="sidebar"><BrandLockup /><nav className={user.is_owner ? 'owner-nav' : ''}>{visibleNav.map((item) => <button key={item.id} className={active === item.id && !selectedMonitor ? 'nav-item active' : 'nav-item'} onClick={() => navigateTo(item.id)}><item.icon size={18} /><span>{item.label}</span>{item.id === 'incidents' && openIncidents.length > 0 && <b>{openIncidents.length}</b>}</button>)}</nav><div className="sidebar-bottom"><button className={active === 'alerts' && !selectedMonitor ? 'nav-item active' : 'nav-item'} onClick={() => navigateTo('alerts')}><Bell size={18} /><span>Alert channels</span></button><button className={active === 'settings' && !selectedMonitor ? 'nav-item active' : 'nav-item'} onClick={() => openSettings('profile')}><Settings size={18} /><span>Settings</span></button><div className="usage" style={{ cursor: 'pointer' }} onClick={() => openSettings('billing')} title="Click to manage Plan &amp; Billing"><div><span>Monitors</span><strong>{monitors.length} / {data?.limit || 10}</strong></div><div className="usage-bar"><span style={{ width: `${Math.min(100, monitors.length / Math.max(data?.limit || 10, 1) * 100)}%` }} /></div><small>{user.plan ? `${user.plan.toUpperCase()} Plan (${user.billing_cycle || 'monthly'})` : 'Workspace Allowance'}</small></div><AccountMenu user={user} onSettings={openSettings} onLogout={logout} /></div></aside>
@@ -1228,8 +1323,27 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   }
 }
 
+function isCustomDomainHost(): boolean {
+  const host = (window.location.hostname || '').toLowerCase()
+  return Boolean(
+    host &&
+    !['localhost', '127.0.0.1', 'pingava.com', 'www.pingava.com', 'dashboard.pingava.com', 'api.pingava.com'].includes(host) &&
+    !host.endsWith('.run.app')
+  )
+}
+
 function AppRouter() {
   const path = window.location.pathname.replace(/\/$/, '') || '/'
+  const customSlug = (window as any).__PINGAVA_CUSTOM_DOMAIN_SLUG__
+  if (customSlug || (isCustomDomainHost() && (path === '/' || path === '' || path.startsWith('/status')))) {
+    const targetSlug = customSlug || path.match(/^\/status\/([a-z0-9-]+)\/?$/)?.[1] || 'current'
+    return (
+      <>
+        <PublicStatusPage slug={targetSlug} />
+        <StatusSubscribe slug={targetSlug} />
+      </>
+    )
+  }
   if (isDashboardHost) return <DashboardApp />
   if (path === '/app' || path.startsWith('/app/')) {
     const target = legacyDashboardPath(path)
@@ -1263,7 +1377,10 @@ function AppRouter() {
 
 function App() {
   const path = window.location.pathname.replace(/\/$/, '') || '/'
+  const customSlug = (window as any).__PINGAVA_CUSTOM_DOMAIN_SLUG__
+  const isCustomDomain = Boolean(customSlug || isCustomDomainHost())
   const isPublicPage =
+    !isCustomDomain &&
     !isDashboardHost &&
     !path.startsWith('/app') &&
     !path.startsWith('/status/') &&

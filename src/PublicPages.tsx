@@ -63,103 +63,85 @@ function Section({
    1. PRICING VIEW
    ========================================================= */
 function PricingView() {
-  const [isAnnual, setIsAnnual] = useState(true)
-
   const plans = [
     {
-      name: "Developer",
-      desc: "For individual developers, side projects, and open source tools.",
+      name: "Early Access",
+      desc: "Comprehensive synthetic monitoring unlocked for everyone during our launch.",
       price: "$0",
-      period: "forever free",
-      popular: false,
-      btnText: "Start monitoring free",
-      btnClass: "outline",
-      features: [
-        "5 synthetic HTTP / API monitors",
-        "3-minute check intervals",
-        "1 public status page",
-        "SSL certificate validity checks",
-        "Email outage & recovery alerts",
-        "30-day response history & retention",
-        "1 consecutive failure confirmation rule",
-      ],
-    },
-    {
-      name: "Pro",
-      desc: "For growing web apps, APIs, and teams that need instant alerts.",
-      price: isAnnual ? "$15" : "$19",
-      period: isAnnual ? "per month (billed annually)" : "per month",
+      period: "forever free during launch",
       popular: true,
-      btnText: "Start 14-day free trial",
+      badge: "Available Now",
+      btnText: "Start monitoring free",
       btnClass: "primary",
       features: [
-        "50 synthetic HTTP / API monitors",
-        "30-second check intervals",
-        "5 status pages with custom domains & SSL",
-        "Multi-region edge probes (US, EU, AP)",
-        "JSON Path payload assertions",
-        "SSL expiry alerts (30, 14, 7 days)",
-        "Telegram, Slack, Discord & Webhook alerts",
-        "1-year high-resolution metrics retention",
-        "Predictive Latency Anomaly Radar",
+        "10 synthetic HTTP / API monitors",
+        "1-minute check intervals",
+        "6-Region Global Edge Inspector",
+        "Unlimited public status pages with CNAME & SSL",
+        "SSL certificate validity & advance expiry alerts",
+        "Multi-channel alerts (Email, Telegram, Slack, Discord, PagerDuty)",
+        "Zero-noise consecutive failure verification rules",
+        "AI automated root cause post-mortems",
       ],
     },
     {
-      name: "Team",
-      desc: "For engineering teams operating mission-critical microservices.",
-      price: isAnnual ? "$39" : "$49",
-      period: isAnnual ? "per month (billed annually)" : "per month",
+      name: "Pro SRE Suite",
+      desc: "For production platforms and teams requiring sub-minute triage.",
+      price: "Coming Soon",
+      period: "post-merchant verification",
       popular: false,
-      btnText: "Start 14-day free trial",
-      btnClass: "primary",
-      features: [
-        "250 synthetic HTTP / API monitors",
-        "15-second check intervals",
-        "Unlimited custom status pages",
-        "Subscriber email & webhook broadcasts",
-        "AI automated incident post-mortems",
-        "API contract drift guardian & schema checks",
-        "Multi-region quorum consensus rules",
-        "Team seats with role-based access",
-        "2-year metrics retention & priority SLA",
-      ],
-    },
-    {
-      name: "Enterprise",
-      desc: "For high-scale organizations requiring custom probes and guarantees.",
-      price: "Custom",
-      period: "tailored billing",
-      popular: false,
-      btnText: "Talk to engineering",
+      badge: "Coming Soon",
+      btnText: "Enroll as Early Adopter",
       btnClass: "outline",
       features: [
-        "Unlimited synthetic monitors",
-        "5-second check intervals",
-        "Dedicated private probe clusters",
+        "60+ synthetic monitors",
+        "30-second rapid check intervals",
+        "Predictive Latency Anomaly Radar (P50–P99)",
+        "API Contract & Schema Drift Guardian",
+        "1-year high-resolution telemetry retention",
+        "Priority probe scheduling",
+      ],
+    },
+    {
+      name: "Team / Enterprise",
+      desc: "For high-scale engineering organizations operating microservices.",
+      price: "Coming Soon",
+      period: "post-merchant verification",
+      popular: false,
+      badge: "Coming Soon",
+      btnText: "Contact Engineering",
+      btnClass: "outline",
+      features: [
+        "250+ synthetic monitors",
+        "15-second ultra-high frequency checks",
+        "Multi-user RBAC & team workspaces",
+        "Dedicated private probe clusters & custom nodes",
         "99.99% availability SLA guarantee",
-        "SAML 2.0 / Okta SSO & SCIM directory",
-        "Custom audit logs & cold storage exports",
-        "Dedicated Slack channel with reliability team",
+        "Priority 24/7 dedicated engineering support",
       ],
     },
   ]
 
   const faqs = [
     {
+      q: "Why is Pingava completely free right now?",
+      a: "We are currently operating our public Early Access launch while our payment aggregator and merchant account verification is underway. During this period, all registered workspaces enjoy full platform features completely free with zero credit card required.",
+    },
+    {
+      q: "Will I ever be charged unexpectedly or forced to enter payment info?",
+      a: "Never. Pingava never asks for your credit card during early access. When self-serve paid subscription tiers are launched, your workspace will remain intact and you will have complete control over whether to remain on the free tier or upgrade.",
+    },
+    {
       q: "What counts as a monitor in Pingava?",
       a: "A monitor is any single website URL, REST API endpoint, or health check that Pingava tests on a recurring schedule. You can configure HTTP methods, custom headers, request bodies, timeout limits, and failure thresholds for each monitor.",
     },
     {
+      q: "Can I host a status page on my own custom domain?",
+      a: "Yes! Custom domain status pages (via CNAME e.g. status.yourbrand.com) with automated SSL certificates are fully supported and free during early access.",
+    },
+    {
       q: "How does the consecutive failure rule prevent false alarms?",
       a: "Transient network blips and routing hiccups happen on the internet. Pingava verifies outages with consecutive failure checks (e.g. 2 or 3 failed attempts in a row) across multiple edge probes before opening an incident or sending alert notifications.",
-    },
-    {
-      q: "Can I change or cancel my plan at any time?",
-      a: "Yes. You can upgrade, downgrade, or cancel your subscription at any time directly from your workspace dashboard. Changes take effect immediately, and annual plans are prorated automatically.",
-    },
-    {
-      q: "Do I need a credit card to sign up for the free Developer tier?",
-      a: "No credit card is required. You can sign up with your email or Google account and begin monitoring up to 5 endpoints immediately for free.",
     },
     {
       q: "How does the AI post-mortem feature work?",
@@ -169,24 +151,9 @@ function PricingView() {
 
   return (
     <>
-      <div className="pricing-billing-toggle-wrap">
-        <div className="pricing-billing-toggle" role="group" aria-label="Billing frequency">
-          <button
-            type="button"
-            className={!isAnnual ? "active" : ""}
-            onClick={() => setIsAnnual(false)}
-          >
-            Monthly billing
-          </button>
-          <button
-            type="button"
-            className={isAnnual ? "active" : ""}
-            onClick={() => setIsAnnual(true)}
-          >
-            Annual billing
-          </button>
-        </div>
-        <span className="pricing-save-badge">Save 20% with annual</span>
+      <div style={{ maxWidth: 860, margin: "0 auto 32px", textAlign: "center", padding: "14px 20px", background: "rgba(56, 189, 248, 0.08)", border: "1px solid rgba(56, 189, 248, 0.25)", borderRadius: 10, color: "var(--foreground)" }}>
+        <strong style={{ color: "#0284c7" }}>✨ Public Early Access Program Active: </strong>
+        <span>All core synthetic monitoring features are 100% free while our merchant account &amp; payment aggregator compliance is being finalized.</span>
       </div>
 
       <div className="pricing-grid">
@@ -195,7 +162,7 @@ function PricingView() {
             key={plan.name}
             className={`pricing-card ${plan.popular ? "popular" : ""}`}
           >
-            {plan.popular && <span className="pricing-popular-badge">Most Popular</span>}
+            {plan.badge && <span className="pricing-popular-badge">{plan.badge}</span>}
             <h3>{plan.name}</h3>
             <p className="pricing-card-desc">{plan.desc}</p>
             <div className="pricing-price-wrap">
@@ -211,7 +178,7 @@ function PricingView() {
               ))}
             </ul>
             <a
-              href={plan.name === "Enterprise" ? "/contact" : "/register"}
+              href={plan.name.includes("Enterprise") ? "/contact" : "/register"}
               className={`pricing-card-btn ${plan.btnClass}`}
             >
               {plan.btnText}
@@ -226,17 +193,17 @@ function PricingView() {
             <thead>
               <tr>
                 <th>Capability</th>
-                <th>Developer</th>
-                <th>Pro</th>
-                <th>Team</th>
-                <th>Enterprise</th>
+                <th style={{ color: "var(--primary)" }}>Early Access (Active)</th>
+                <th>Pro (Coming Soon)</th>
+                <th>Team (Coming Soon)</th>
+                <th>Enterprise (Coming Soon)</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td><strong>Monitor Allowance</strong></td>
-                <td>5 monitors</td>
-                <td>50 monitors</td>
+                <td><strong>10 monitors (Free)</strong></td>
+                <td>60 monitors</td>
                 <td>250 monitors</td>
                 <td>Unlimited</td>
               </tr>
@@ -1594,9 +1561,9 @@ function IncidentManagementView() {
    ========================================================= */
 const hero: Record<PublicPagePath, [string, string, string]> = {
   "/pricing": [
-    "TRANSPARENT PRICING",
-    "Predictable plans that scale with your infrastructure.",
-    "Start monitoring your websites and APIs for free. Upgrade whenever you need higher frequencies, multi-region edge inspections, or AI post-mortems.",
+    "EARLY ACCESS PROGRAM",
+    "100% Free During Early Access. Paid Tiers Coming Soon.",
+    "Start monitoring your websites and APIs for $0 with multi-region edge checks and status pages. Paid self-serve plans are coming soon once merchant aggregator compliance is finalized.",
   ],
   "/api-docs": [
     "DEVELOPER API REFERENCE",

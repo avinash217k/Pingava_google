@@ -116,6 +116,27 @@ export function PublicFooter({ showCta = false }: { showCta?: boolean }) {
             <GithubIcon />
           </a>
         </div>
+        <div className="public-footer-badges" aria-label="Featured directories and recognition">
+          <span className="public-footer-badges-label">Featured On</span>
+          <div className="public-footer-badges-list">
+            <a
+              href="https://codehype.ai/product/pingava?utm_source=codehype_badge"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Featured on CodeHype"
+            >
+              <img
+                src="https://codehype.ai/badges/pingava.svg?variant=find-us&v=20"
+                alt="Featured on CodeHype"
+                width="180"
+                height="65"
+                loading="lazy"
+                decoding="async"
+                style={{ display: 'inline-block', border: 0, width: '100%', maxWidth: '180px', height: 'auto', maxHeight: '65px' }}
+              />
+            </a>
+          </div>
+        </div>
         <label className="public-footer-theme">Appearance
           <select value={preference} onChange={event => setTheme(event.target.value as ThemePreference)}>
             <option value="system">System</option>

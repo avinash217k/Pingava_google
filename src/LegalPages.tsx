@@ -113,13 +113,16 @@ export function TermsPage() {
 
       <section>
         <h2>7. Subscription Plans, Billing &amp; Refunds</h2>
+        <div style={{ padding: '12px 16px', background: 'rgba(59, 130, 246, 0.08)', borderRadius: 8, border: '1px solid rgba(59, 130, 246, 0.2)', marginBottom: 16 }}>
+          <strong>Early Access Program Notice:</strong> During the current Public Early Access launch period, all platform capabilities are provided free of charge with no credit card required. Subscription fees, billing intervals, and payment methods describe our upcoming paid tiers and will become active once merchant payment processing is officially enabled.
+        </div>
         <p>
-          Pingava offers both free tiers (Developer) and paid recurring subscription plans (Pro, Team, Enterprise).
+          Pingava offers both free tiers (Developer / Early Access) and upcoming paid recurring subscription plans (Pro, Team, Enterprise).
         </p>
         <ul>
-          <li><strong>Recurring Billing:</strong> Paid subscriptions are billed in advance on a recurring monthly or annual basis, commencing on the date you upgrade. Subscriptions automatically renew at the end of each billing interval unless canceled prior to the renewal date.</li>
+          <li><strong>Recurring Billing:</strong> Once merchant processing launches, paid subscriptions will be billed in advance on a recurring monthly or annual basis, commencing on the date you upgrade. Subscriptions automatically renew at the end of each billing interval unless canceled prior to the renewal date.</li>
           <li><strong>Plan Changes:</strong> Upgrades take effect immediately, with prorated adjustments applied automatically. Downgrades take effect at the conclusion of the active billing cycle.</li>
-          <li><strong>Cancellation:</strong> You may cancel your subscription at any time directly through your workspace dashboard under Plan &amp; Billing. Following cancellation, your account will remain active at the paid tier until the conclusion of the prepaid period, after which it will revert to the Developer tier.</li>
+          <li><strong>Cancellation:</strong> You may cancel your subscription at any time directly through your workspace dashboard under Plan &amp; Early Access. Following cancellation, your account will remain active at the paid tier until the conclusion of the prepaid period, after which it will revert to the Developer tier.</li>
           <li><strong>Refund Policy:</strong> All fees paid to Pingava are non-refundable, except where mandatory consumer protection statutes require otherwise. We do not issue cash refunds, credits, or proration for partial months or unused monitoring allocations.</li>
           <li><strong>Taxes:</strong> Fees are exclusive of applicable national, state, or municipal sales taxes, goods and services taxes (GST), or value-added taxes (VAT), which will be charged where legally required.</li>
         </ul>

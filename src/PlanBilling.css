@@ -49,6 +49,14 @@
   border: 1px solid #c7d7fe;
 }
 
+.plan-badge-pill.early-access {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.3);
+  display: inline-flex;
+  align-items: center;
+}
+
 .plan-badge-pill.pro {
   background: #f0fdf4;
   color: #15803d;
@@ -686,4 +694,192 @@
   background: #1e293b;
   border-color: #3b82f6;
   color: #bfdbfe;
+}
+
+/* Coming Soon & Roadmap Card Styles */
+.coming-soon-card {
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--border-color, #e4e7ec);
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
+}
+.coming-soon-header {
+  margin-bottom: 24px;
+}
+.coming-soon-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.12);
+  color: #0284c7;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  margin-bottom: 12px;
+}
+.coming-soon-header h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--foreground, #0f172a);
+}
+.coming-soon-header p {
+  color: var(--muted-foreground, #64748b);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  max-width: 720px;
+  margin: 0;
+}
+.upcoming-tiers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+  margin-bottom: 28px;
+}
+.upcoming-tier-box {
+  background: var(--surface-bg, rgba(248, 250, 252, 0.6));
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 10px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.upcoming-tier-box.highlight {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.03);
+}
+.upcoming-tier-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.upcoming-tier-head h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--foreground, #0f172a);
+}
+.upcoming-status-tag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--muted-foreground, #64748b);
+}
+.upcoming-status-tag.highlight {
+  background: rgba(56, 189, 248, 0.18);
+  color: #0284c7;
+}
+.upcoming-tier-summary {
+  font-size: 0.85rem;
+  color: var(--muted-foreground, #64748b);
+  line-height: 1.5;
+  margin: 0 0 16px;
+}
+.upcoming-tier-features {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--foreground, #334155);
+}
+.upcoming-tier-features li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.upcoming-tier-features svg {
+  color: #10b981;
+  flex-shrink: 0;
+}
+.early-adopter-voucher-wrap {
+  background: var(--surface-bg, #f8fafc);
+  border: 1px dashed var(--border-color, #cbd5e1);
+  border-radius: 10px;
+  padding: 18px 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.early-adopter-voucher-info strong {
+  display: block;
+  font-size: 0.95rem;
+  color: var(--foreground, #0f172a);
+  margin-bottom: 4px;
+}
+.early-adopter-voucher-info p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted-foreground, #64748b);
+}
+.voucher-input-form {
+  display: flex;
+  gap: 8px;
+}
+.voucher-input-form input {
+  padding: 8px 14px;
+  border: 1px solid var(--border-color, #cbd5e1);
+  border-radius: 7px;
+  background: var(--input-bg, #ffffff);
+  color: var(--foreground, #0f172a);
+  font-size: 0.9rem;
+  text-transform: uppercase;
+}
+.voucher-claimed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  font-size: 0.88rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+:root[data-theme="dark"] .coming-soon-card {
+  background: #182234;
+  border-color: #273549;
+  color: #f1f5f9;
+}
+:root[data-theme="dark"] .upcoming-tier-box {
+  background: #101726;
+  border-color: #1e293b;
+}
+:root[data-theme="dark"] .upcoming-tier-box.highlight {
+  background: rgba(56, 189, 248, 0.05);
+  border-color: #38bdf8;
+}
+:root[data-theme="dark"] .upcoming-tier-features {
+  color: #cbd5e1;
+}
+:root[data-theme="dark"] .early-adopter-voucher-wrap {
+  background: #101726;
+  border-color: #273549;
+}
+:root[data-theme="dark"] .voucher-input-form input {
+  background: #182234;
+  border-color: #273549;
+  color: #f8fafc;
+}
+:root[data-theme="dark"] .coming-soon-badge {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.3);
+}
+:root[data-theme="dark"] .upcoming-status-tag.highlight {
+  color: #38bdf8;
 }

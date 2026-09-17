@@ -7,6 +7,7 @@ import {
   BookOpen,
   Check,
   CheckCircle2,
+  Clock,
   Copy,
   ExternalLink,
   Eye,
@@ -25,7 +26,7 @@ import {
   Upload,
   X
 } from 'lucide-react'
-import { api, userFacingError, type Monitor, type StatusPage, type StatusSubscriber, type User } from './api'
+import { api, userFacingError, verifyStatusPageCname, type Monitor, type StatusPage, type StatusSubscriber, type User } from './api'
 import { trackEvent } from './analyticsClient'
 import { BrandMark } from './Brand'
 import { PageMetadata } from './Seo'
@@ -249,6 +250,10 @@ export function StatusPageSettings({ user, monitors: initialMonitors, onRefresh,
   const [emailSubscriptions, setEmailSubscriptions] = useState(true)
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [logoFileName, setLogoFileName] = useState<string>('')
+  const [customDomain, setCustomDomain] = useState<string>('')
+  const [cnameVerified, setCnameVerified] = useState<boolean>(false)
+  const [verifyingCname, setVerifyingCname] = useState<boolean>(false)
+  const [cnameVerificationResult, setCnameVerificationResult] = useState<{ verified: boolean; message: string } | null>(null)
 
   // UI Modals & Popovers
   const [showLearnModal, setShowLearnModal] = useState(false)
@@ -284,6 +289,8 @@ export function StatusPageSettings({ user, monitors: initialMonitors, onRefresh,
         setIsPublished(pageData.published !== undefined ? pageData.published : true)
         setEmailSubscriptions(pageData.email_subscriptions_enabled !== undefined ? pageData.email_subscriptions_enabled : true)
         setLogoUrl(pageData.logo_url || null)
+        setCustomDomain(pageData.custom_domain || '')
+        setCnameVerified(Boolean(pageData.cname_verified))
       } else {
         const fallbackSlug = `${user.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-status`
         setPageTitle(`${user.name}'s services`)
@@ -291,6 +298,8 @@ export function StatusPageSettings({ user, monitors: initialMonitors, onRefresh,
         setPageSlug(fallbackSlug)
         setIsPublished(true)
         setEmailSubscriptions(true)
+        setCustomDomain('')
+        setCnameVerified(false)
       }
 
       if (dashboardData?.monitors) {
@@ -341,7 +350,8 @@ export function StatusPageSettings({ user, monitors: initialMonitors, onRefresh,
           customOverrides?.email_subscriptions_enabled !== undefined
             ? customOverrides.email_subscriptions_enabled
             : emailSubscriptions,
-        logo_url: logoUrl
+        logo_url: logoUrl,
+        custom_domain: customDomain.trim().toLowerCase() || null
       }
 
       const updated = await api<StatusPage>('/status-page', {
@@ -358,6 +368,45 @@ export function StatusPageSettings({ user, monitors: initialMonitors, onRefresh,
       setError(userFacingError(err, 'Could not save status page settings. Please try again.'))
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Live DNS CNAME Verification
+  const handleVerifyCname = async () => {
+    if (!customDomain) return
+    setVerifyingCname(true)
+    setCnameVerificationResult(null)
+    try {
+      // First save domain to backend
+      await api<StatusPage>('/status-page', {
+        method: 'PUT',
+        body: JSON.stringify({
+          custom_domain: customDomain.trim().toLowerCase()
+        })
+      })
+      const result = await verifyStatusPageCname(customDomain.trim().toLowerCase())
+      if (result.verified) {
+        setCnameVerified(true)
+        setCnameVerificationResult({
+          verified: true,
+          message: `CNAME successfully verified! Points to ${result.target}.`
+        })
+        showToast('Custom domain DNS verified and active!')
+      } else {
+        setCnameVerified(false)
+        setCnameVerificationResult({
+          verified: false,
+          message: result.error || `CNAME does not point to ${result.target} yet. DNS propagation may take a few minutes.`
+        })
+      }
+    } catch (err: any) {
+      setCnameVerified(false)
+      setCnameVerificationResult({
+        verified: false,
+        message: err?.message || 'Failed to verify DNS CNAME. Please try again.'
+      })
+    } finally {
+      setVerifyingCname(false)
     }
   }
 
@@ -740,6 +789,119 @@ export function StatusPageSettings({ user, monitors: initialMonitors, onRefresh,
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+
+            {/* 2.5 CUSTOM DOMAIN (CNAME) CARD */}
+            <div className="status-card">
+              <div className="status-card-header">
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <h2 className="status-card-title">Custom Domain (CNAME)</h2>
+                    {cnameVerified ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 12, background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontSize: 11, fontWeight: 700 }}>
+                        <CheckCircle2 size={12} /> Verified & Live
+                      </span>
+                    ) : customDomain ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 12, background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', fontSize: 11, fontWeight: 700 }}>
+                        <Clock size={12} /> DNS Pending
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="status-card-subtitle">Host your status page on your own branded domain (e.g. status.yourbrand.com)</p>
+                </div>
+              </div>
+
+              <div className="status-form-group">
+                <label className="status-form-label" htmlFor="custom-domain-input">
+                  Domain Name
+                </label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    id="custom-domain-input"
+                    className="status-form-input"
+                    style={{ flex: 1 }}
+                    value={customDomain}
+                    onChange={(e) => {
+                      setCustomDomain(e.target.value.toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, ''))
+                      setCnameVerified(false)
+                      setCnameVerificationResult(null)
+                    }}
+                    placeholder="status.yourcompany.com"
+                  />
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    style={{ whiteSpace: 'nowrap', padding: '0 14px', fontSize: 12 }}
+                    disabled={!customDomain || verifyingCname}
+                    onClick={handleVerifyCname}
+                  >
+                    {verifyingCname ? (
+                      <>
+                        <RefreshCw size={13} className="spin" /> Verifying...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 size={13} /> Verify DNS
+                      </>
+                    )}
+                  </button>
+                </div>
+                <span className="status-form-help">Enter your custom subdomain without protocol (e.g. status.domain.com).</span>
+              </div>
+
+              {/* DNS Instructions Box */}
+              <div style={{ marginTop: 12, padding: 14, borderRadius: 8, background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, color: '#f8fafc' }}>
+                  DNS Configuration Instructions
+                </p>
+                <p style={{ margin: '0 0 10px', fontSize: 12, color: '#94a3b8', lineHeight: 1.5 }}>
+                  Add a <strong>CNAME</strong> record at your DNS provider (Cloudflare, GoDaddy, Route53, Namecheap, etc.):
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, fontSize: 12 }}>
+                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', padding: '8px 10px', borderRadius: 6 }}>
+                    <span style={{ color: '#64748b', fontSize: 10, textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>Record Type</span>
+                    <strong style={{ color: '#38bdf8' }}>CNAME</strong>
+                  </div>
+                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', padding: '8px 10px', borderRadius: 6 }}>
+                    <span style={{ color: '#64748b', fontSize: 10, textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>Host / Name</span>
+                    <strong style={{ color: '#f8fafc' }}>{customDomain ? customDomain.split('.')[0] : 'status'}</strong>
+                  </div>
+                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', padding: '8px 10px', borderRadius: 6 }}>
+                    <span style={{ color: '#64748b', fontSize: 10, textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>Target / Value</span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                      <strong style={{ color: '#4ade80' }}>cname.pingava.com</strong>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyUrl('cname.pingava.com')}
+                        style={{ background: 'none', border: 0, color: '#94a3b8', cursor: 'pointer', padding: 2 }}
+                        title="Copy CNAME target"
+                      >
+                        <Copy size={11} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {cnameVerificationResult && (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      padding: '8px 12px',
+                      borderRadius: 6,
+                      fontSize: 12,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      background: cnameVerificationResult.verified ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                      border: `1px solid ${cnameVerificationResult.verified ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                      color: cnameVerificationResult.verified ? '#34d399' : '#f87171'
+                    }}
+                  >
+                    {cnameVerificationResult.verified ? <CheckCircle2 size={14} /> : <TriangleAlert size={14} />}
+                    <span>{cnameVerificationResult.message}</span>
+                  </div>
+                )}
               </div>
             </div>
 

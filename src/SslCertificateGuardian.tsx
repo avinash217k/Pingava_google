@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   AlertTriangle,
   Bell,
@@ -12,7 +12,7 @@ import {
   ShieldCheck,
   Zap,
 } from 'lucide-react'
-import { api, checkMonitorSsl, type Monitor } from './api'
+import { api, checkMonitorSsl, getSslFleetOverview, scanSslFleet, type Monitor, type SslFleetOverview } from './api'
 import './SslCertificateGuardian.css'
 
 interface SslCertificateGuardianProps {
@@ -318,8 +318,8 @@ export function SslCertificateGuardian({ monitor, onMonitorUpdate }: SslCertific
           </button>
         </div>
         <p style={{ margin: 0, fontSize: '13px', color: 'var(--muted, #667085)' }}>
-          Pingava safeguards your users from unexpected TLS outages by dispatching alerts via Brevo Email, Slack,
-          Discord, and Webhooks at each milestone before certificate expiration.
+          Pingava safeguards your users from unexpected TLS outages by dispatching alerts via Pingava Email (alerts@pingava.com), Slack,
+          Discord, Telegram, PagerDuty, and Webhooks at each milestone before certificate expiration.
         </p>
 
         <div className="ssl-tiers-steps">
@@ -383,3 +383,103 @@ export function SslCertificateGuardian({ monitor, onMonitorUpdate }: SslCertific
     </div>
   )
 }
+
+export function SslFleetGuardianCard() {
+  const [fleet, setFleet] = useState<SslFleetOverview | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const [feedback, setFeedback] = useState<string | null>(null)
+
+  const loadFleet = async () => {
+    setLoading(true)
+    try {
+      const data = await getSslFleetOverview()
+      setFleet(data)
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadFleet()
+  }, [])
+
+  const handleScanFleet = async () => {
+    if (scanning) return
+    setScanning(true)
+    setFeedback(null)
+    try {
+      const updated = await scanSslFleet()
+      setFleet(updated)
+      setFeedback(`Scanned ${updated.scanned_count || updated.total_https} certificates successfully`)
+      setTimeout(() => setFeedback(null), 4000)
+    } catch {
+      setFeedback('Fleet scan failed. Please try again.')
+      setTimeout(() => setFeedback(null), 4000)
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  if (!fleet && loading) return null
+  if (!fleet || fleet.total_https === 0) return null
+
+  return (
+    <div className="ssl-guardian-card" style={{ marginTop: '1.25rem' }}>
+      <div className="ssl-guardian-header">
+        <div className="ssl-header-info">
+          <div className="ssl-header-icon" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981' }}>
+            <ShieldCheck size={20} />
+          </div>
+          <div>
+            <h3 className="ssl-header-title">Fleet SSL Certificate Guardian</h3>
+            <p className="ssl-header-sub">
+              Automated background monitoring with 30d, 14d, 7d, and 24h advance warnings across {fleet.total_https} HTTPS endpoints
+            </p>
+          </div>
+        </div>
+
+        <div className="ssl-header-actions">
+          <button
+            type="button"
+            className="ssl-recheck-btn"
+            onClick={handleScanFleet}
+            disabled={scanning}
+            title="Scan all certificates now"
+          >
+            <RefreshCw size={13} className={scanning ? 'spin' : ''} />
+            {scanning ? 'Scanning fleet...' : 'Scan Fleet Now'}
+          </button>
+        </div>
+      </div>
+
+      {feedback && (
+        <div style={{ padding: '8px 12px', borderRadius: 6, background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', fontSize: 12, marginBottom: 12 }}>
+          {feedback}
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginTop: 12 }}>
+        <div style={{ padding: '12px 14px', borderRadius: 8, background: 'var(--surface-subtle, rgba(255,255,255,0.03))', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <span style={{ fontSize: 11, color: 'var(--muted, #94a3b8)', textTransform: 'uppercase', fontWeight: 600 }}>Valid Certs</span>
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#10b981', marginTop: 4 }}>{fleet.valid_count}</div>
+        </div>
+        <div style={{ padding: '12px 14px', borderRadius: 8, background: 'var(--surface-subtle, rgba(255,255,255,0.03))', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <span style={{ fontSize: 11, color: 'var(--muted, #94a3b8)', textTransform: 'uppercase', fontWeight: 600 }}>Expiring (&le;30d)</span>
+          <div style={{ fontSize: 22, fontWeight: 700, color: fleet.expiring_soon_count > 0 ? '#f59e0b' : 'inherit', marginTop: 4 }}>{fleet.expiring_soon_count}</div>
+        </div>
+        <div style={{ padding: '12px 14px', borderRadius: 8, background: 'var(--surface-subtle, rgba(255,255,255,0.03))', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <span style={{ fontSize: 11, color: 'var(--muted, #94a3b8)', textTransform: 'uppercase', fontWeight: 600 }}>Critical (&le;7d)</span>
+          <div style={{ fontSize: 22, fontWeight: 700, color: fleet.critical_count > 0 ? '#ef4444' : 'inherit', marginTop: 4 }}>{fleet.critical_count}</div>
+        </div>
+        <div style={{ padding: '12px 14px', borderRadius: 8, background: 'var(--surface-subtle, rgba(255,255,255,0.03))', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <span style={{ fontSize: 11, color: 'var(--muted, #94a3b8)', textTransform: 'uppercase', fontWeight: 600 }}>Expired</span>
+          <div style={{ fontSize: 22, fontWeight: 700, color: fleet.expired_count > 0 ? '#ef4444' : 'inherit', marginTop: 4 }}>{fleet.expired_count}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+

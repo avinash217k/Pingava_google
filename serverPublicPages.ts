@@ -243,6 +243,11 @@ export function renderPublicPageContent(p: string): string {
         <div>
           <strong style="color:#fff;font-size:1.1rem;">pingava</strong>
           <p style="margin-top:0.5rem;max-width:260px;line-height:1.5;">Next-gen website &amp; REST API synthetic monitoring, 6-region global edge waterfalls, and AI root cause diagnostics.</p>
+          <div style="margin-top:1.25rem;">
+            <a href="https://codehype.ai/product/pingava?utm_source=codehype_badge" target="_blank" rel="noopener noreferrer">
+              <img src="https://codehype.ai/badges/pingava.svg?variant=find-us&amp;v=20" alt="Featured on CodeHype" width="180" height="65" loading="lazy" decoding="async" style="display:inline-block;border:0;width:100%;max-width:180px;height:auto;max-height:65px;" />
+            </a>
+          </div>
         </div>
         <div>
           <strong style="color:#fff;display:block;margin-bottom:0.75rem;">Product</strong>
@@ -330,50 +335,54 @@ export function renderPublicPageContent(p: string): string {
       <nav style="display:flex;gap:1.5rem;"><a href="/features" style="color:#94a3b8;text-decoration:none;">Features</a><a href="/docs" style="color:#94a3b8;text-decoration:none;">Docs</a><a href="/demo" style="color:#38bdf8;text-decoration:none;">Demo</a></nav>
     </header>
     <main style="max-width:1100px;margin:3rem auto;padding:0 1.5rem;text-align:center;">
-      <h1 style="font-size:2.5rem;color:#f8fafc;margin-bottom:1rem;">Predictable, Transparent Pricing</h1>
-      <p style="font-size:1.15rem;color:#94a3b8;margin-bottom:3rem;max-width:650px;margin-left:auto;margin-right:auto;">Start free with no credit card. Scale to high-frequency 15-second checks and multi-region SRE diagnostics whenever you need.</p>
+      <span style="display:inline-block;background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);padding:0.35rem 1rem;border-radius:999px;font-size:0.85rem;font-weight:700;margin-bottom:1rem;letter-spacing:0.04em;">PUBLIC EARLY ACCESS PROGRAM</span>
+      <h1 style="font-size:2.5rem;color:#f8fafc;margin-bottom:1rem;">100% Free During Launch. Paid Tiers Coming Soon.</h1>
+      <p style="font-size:1.15rem;color:#94a3b8;margin-bottom:3rem;max-width:700px;margin-left:auto;margin-right:auto;">All synthetic uptime and API monitoring features are completely free during our public launch while payment aggregator compliance is finalized. No credit card required.</p>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:2rem;text-align:left;">
-        <div style="background:rgba(15,23,42,0.8);border:1px solid rgba(255,255,255,0.1);padding:2rem;border-radius:12px;">
-          <h2 style="font-size:1.35rem;color:#f8fafc;margin-bottom:0.5rem;">Developer</h2>
-          <div style="font-size:2rem;font-weight:800;color:#f8fafc;margin-bottom:1rem;">$0 <span style="font-size:1rem;color:#94a3b8;font-weight:400;">/ month</span></div>
-          <p style="color:#94a3b8;font-size:0.9rem;margin-bottom:1.5rem;">Essential synthetic monitoring for personal projects and side apps.</p>
+        <div style="background:rgba(15,23,42,0.9);border:2px solid #10b981;padding:2rem;border-radius:12px;position:relative;">
+          <span style="position:absolute;top:-12px;right:20px;background:#10b981;color:#0f172a;font-size:0.75rem;font-weight:700;padding:0.2rem 0.6rem;border-radius:999px;">ACTIVE NOW</span>
+          <h2 style="font-size:1.35rem;color:#f8fafc;margin-bottom:0.5rem;">Early Access Edition</h2>
+          <div style="font-size:2rem;font-weight:800;color:#f8fafc;margin-bottom:1rem;">$0 <span style="font-size:1rem;color:#10b981;font-weight:600;">/ forever free during launch</span></div>
+          <p style="color:#94a3b8;font-size:0.9rem;margin-bottom:1.5rem;">Full platform capabilities with zero fees. No credit card needed.</p>
           <ul style="list-style:none;padding:0;margin:0 0 2rem;color:#cbd5e1;line-height:2;font-size:0.9rem;">
-            <li>&check; 5 monitors</li>
-            <li>&check; 3-minute check intervals</li>
-            <li>&check; 1 public status page</li>
-            <li>&check; Email outage alerts</li>
-            <li>&check; SSL expiry tracking</li>
-          </ul>
-          <a href="/register" style="display:block;text-align:center;background:rgba(255,255,255,0.1);color:#fff;padding:0.75rem;border-radius:8px;text-decoration:none;font-weight:600;">Start Free</a>
-        </div>
-        <div style="background:rgba(15,23,42,0.9);border:2px solid #38bdf8;padding:2rem;border-radius:12px;position:relative;">
-          <span style="position:absolute;top:-12px;right:20px;background:#38bdf8;color:#0f172a;font-size:0.75rem;font-weight:700;padding:0.2rem 0.6rem;border-radius:999px;">MOST POPULAR</span>
-          <h2 style="font-size:1.35rem;color:#f8fafc;margin-bottom:0.5rem;">Pro</h2>
-          <div style="font-size:2rem;font-weight:800;color:#f8fafc;margin-bottom:1rem;">$19 <span style="font-size:1rem;color:#94a3b8;font-weight:400;">/ month</span></div>
-          <p style="color:#94a3b8;font-size:0.9rem;margin-bottom:1.5rem;">High-frequency monitoring and SRE tools for production products.</p>
-          <ul style="list-style:none;padding:0;margin:0 0 2rem;color:#cbd5e1;line-height:2;font-size:0.9rem;">
-            <li>&check; 50 monitors</li>
-            <li>&check; 30-second check intervals</li>
-            <li>&check; 6-region edge inspection</li>
+            <li>&check; 10 synthetic monitors</li>
+            <li>&check; 1-minute check intervals</li>
+            <li>&check; 6-Region Global Edge Inspector</li>
+            <li>&check; Unlimited public status pages with CNAME &amp; SSL</li>
+            <li>&check; Multi-channel alerts (Email, Telegram, Slack, Discord)</li>
             <li>&check; AI root cause post-mortems</li>
-            <li>&check; Latency anomaly radar</li>
-            <li>&check; Telegram, Slack &amp; Discord alerts</li>
           </ul>
-          <a href="/register" style="display:block;text-align:center;background:#0284c7;color:#fff;padding:0.75rem;border-radius:8px;text-decoration:none;font-weight:600;">Get Started with Pro</a>
+          <a href="/register" style="display:block;text-align:center;background:#10b981;color:#06271f;padding:0.75rem;border-radius:8px;text-decoration:none;font-weight:700;">Start Monitoring Free</a>
         </div>
-        <div style="background:rgba(15,23,42,0.8);border:1px solid rgba(255,255,255,0.1);padding:2rem;border-radius:12px;">
-          <h2 style="font-size:1.35rem;color:#f8fafc;margin-bottom:0.5rem;">Team / Enterprise</h2>
-          <div style="font-size:2rem;font-weight:800;color:#f8fafc;margin-bottom:1rem;">$79 <span style="font-size:1rem;color:#94a3b8;font-weight:400;">/ month</span></div>
-          <p style="color:#94a3b8;font-size:0.9rem;margin-bottom:1.5rem;">Mission-critical reliability for scaling engineering teams.</p>
+        <div style="background:rgba(15,23,42,0.8);border:1px solid rgba(255,255,255,0.1);padding:2rem;border-radius:12px;position:relative;">
+          <span style="position:absolute;top:-12px;right:20px;background:#38bdf8;color:#0f172a;font-size:0.75rem;font-weight:700;padding:0.2rem 0.6rem;border-radius:999px;">COMING SOON</span>
+          <h2 style="font-size:1.35rem;color:#f8fafc;margin-bottom:0.5rem;">Pro SRE Suite</h2>
+          <div style="font-size:2rem;font-weight:800;color:#f8fafc;margin-bottom:1rem;">Coming Soon <span style="font-size:1rem;color:#94a3b8;font-weight:400;">(Post-verification)</span></div>
+          <p style="color:#94a3b8;font-size:0.9rem;margin-bottom:1.5rem;">Higher monitor capacity and predictive analytics for scaling teams.</p>
           <ul style="list-style:none;padding:0;margin:0 0 2rem;color:#cbd5e1;line-height:2;font-size:0.9rem;">
-            <li>&check; 250 monitors</li>
+            <li>&check; 60+ synthetic monitors</li>
+            <li>&check; 30-second check intervals</li>
+            <li>&check; Predictive Latency Jitter Radar (P50–P99)</li>
+            <li>&check; API Contract &amp; Schema Drift Guardian</li>
+            <li>&check; 1-year telemetry retention</li>
+            <li>&check; Priority probe dispatch</li>
+          </ul>
+          <a href="/register" style="display:block;text-align:center;background:rgba(255,255,255,0.1);color:#fff;padding:0.75rem;border-radius:8px;text-decoration:none;font-weight:600;">Enroll in Early Access</a>
+        </div>
+        <div style="background:rgba(15,23,42,0.8);border:1px solid rgba(255,255,255,0.1);padding:2rem;border-radius:12px;position:relative;">
+          <span style="position:absolute;top:-12px;right:20px;background:#818cf8;color:#0f172a;font-size:0.75rem;font-weight:700;padding:0.2rem 0.6rem;border-radius:999px;">COMING SOON</span>
+          <h2 style="font-size:1.35rem;color:#f8fafc;margin-bottom:0.5rem;">Team / Enterprise</h2>
+          <div style="font-size:2rem;font-weight:800;color:#f8fafc;margin-bottom:1rem;">Coming Soon <span style="font-size:1rem;color:#94a3b8;font-weight:400;">(Post-verification)</span></div>
+          <p style="color:#94a3b8;font-size:0.9rem;margin-bottom:1.5rem;">Mission-critical reliability for scaling engineering organizations.</p>
+          <ul style="list-style:none;padding:0;margin:0 0 2rem;color:#cbd5e1;line-height:2;font-size:0.9rem;">
+            <li>&check; 250+ monitors</li>
             <li>&check; 15-second check intervals</li>
-            <li>&check; Unlimited public &amp; private status pages</li>
-            <li>&check; API contract guardian with drift diffs</li>
-            <li>&check; Dead Man's Snitch cron heartbeats</li>
+            <li>&check; Multi-user RBAC &amp; team workspaces</li>
+            <li>&check; Dedicated private probe clusters</li>
+            <li>&check; 99.99% availability SLA guarantee</li>
             <li>&check; Priority 24/7 engineering support</li>
           </ul>
-          <a href="/register" style="display:block;text-align:center;background:rgba(255,255,255,0.1);color:#fff;padding:0.75rem;border-radius:8px;text-decoration:none;font-weight:600;">Get Started with Team</a>
+          <a href="/contact" style="display:block;text-align:center;background:rgba(255,255,255,0.1);color:#fff;padding:0.75rem;border-radius:8px;text-decoration:none;font-weight:600;">Talk to Engineering</a>
         </div>
       </div>
     </main>

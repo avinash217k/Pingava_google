@@ -67,6 +67,7 @@ async function run() {
   assert(!homeHtml.includes('Zero False Alarms'), 'Rendered home HTML contains no Zero False Alarms mentions');
   assert(homeHtml.includes('All Edge Systems Operational'), 'Rendered home HTML contains dogfooding edge status widget');
   assert(homeHtml.includes('Test your website or REST API right now'), 'Rendered home HTML contains instant URL tester');
+  assert(homeHtml.includes('https://codehype.ai/product/pingava?utm_source=codehype_badge') && homeHtml.includes('https://codehype.ai/badges/pingava.svg'), 'Rendered home HTML contains CodeHype verified badge embed');
 
   const demoHtml = injectPublicPageIntoHtml(indexHtml, '/demo');
   assert(demoHtml.includes('Live Interactive Demo Dashboard'), 'Rendered demo HTML contains demo title');

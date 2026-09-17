@@ -217,23 +217,14 @@ export function getKnowledgeBaseAnswer(message: string): string | null {
   // 8. Pricing & Plans
   if (q.includes("price") || q.includes("pricing") || q.includes("cost") || q.includes("free") || q.includes("plan")) {
     return (
-      "**Pingava Pricing Plans** are designed to scale with your team:\n\n" +
-      "- **Free Tier ($0/mo)**:\n" +
-      "  - 5 monitors\n" +
-      "  - 5-minute check intervals\n" +
-      "  - Email alerts\n" +
-      "  - Public status page\n\n" +
-      "- **Pro Plan ($19/mo)**:\n" +
-      "  - 50 monitors\n" +
-      "  - 1-minute check intervals\n" +
-      "  - 6-region edge inspection\n" +
-      "  - SSL certificate guardian & API contract drift\n" +
-      "  - Custom domain status page (`status.yourcompany.com`)\n" +
-      "  - Webhooks & team alert routing\n\n" +
-      "- **Enterprise Plan ($79/mo)**:\n" +
-      "  - Unlimited monitors\n" +
-      "  - Ultra-high frequency 30-second checks\n" +
-      "  - Priority SRE support & SLA guarantees"
+      "**Pingava Pricing & Launch Status**:\n\n" +
+      "- **Free Tier (100% Free During Public Early Access)**:\n" +
+      "  - Pingava is currently operating a public Early Access program with zero fees and no credit card required!\n" +
+      "  - Includes synthetic HTTP/API monitors, 6-region edge inspections, SSL certificate guardian, and public status pages with custom domains.\n\n" +
+      "- **Upcoming Paid Subscriptions (Coming Soon)**:\n" +
+      "  - **Pro Plan**: 60+ monitors, 30-second intervals, predictive latency jitter radar, and extended telemetry.\n" +
+      "  - **Enterprise Plan**: Custom probe nodes, multi-user RBAC, and dedicated 99.99% availability SLA guarantees.\n" +
+      "  - Self-serve paid plans will launch as soon as payment aggregator verification is complete. Early access users will receive advance notice and grandfathered perks."
     );
   }
 
